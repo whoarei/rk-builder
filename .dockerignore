@@ -1,0 +1,7 @@
+.git
+.github
+.ccache
+build
+dist
+*.bak
+*~
