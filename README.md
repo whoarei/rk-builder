@@ -15,6 +15,9 @@
   版本 1.3.10）。
 - FFmpeg：从 `nyanmisaka/ffmpeg-rockchip` 的 6.1 分支交叉编译，固定 commit
   `d547c18f18c744bc5e2180ce028fe1a6bd23ddad`，启用 `libdrm`、RKMPP 和 RKRGA。
+- deb 打包：librga / rockchip-mpp / ffmpeg-rockchip 共用
+  `scripts/lib-deb-common.sh` 提供的初始化、源码拉取校验、control 渲染和
+  打包函数，各组件脚本只保留编译与产物收集逻辑。
 
 `airockchip/librga` 的 1.10.6 目前没有 tag，而且仓库只发布头文件、samples
 和官方预编译 `librga.so`，没有发布库实现源码。因此 deb 封装的是该
@@ -102,14 +105,7 @@ GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强
 
 - `image.yml`：验证 Dockerfile；对 main/tag 构建并推送
   `ghcr.io/<owner>/rk-builder`。
-- `librga-release.yml`：生成 librga ARM64 deb 工件；对 `librga-v*` tag
-  创建 GitHub Release。
-
-## 部署验证
-
-交叉编译产物不能在 x86_64 宿主机直接运行。例如：
-
-```bash
-scp build/release/aslai-dispfilter root@172.16.0.249:/tmp/
-ssh root@172.16.0.249 /tmp/aslai-dispfilter --help
-```
+- `librga-release.yml` / `mpp-release.yml` / `ffmpeg-rockchip-release.yml`：
+  分别生成对应组件的 ARM64 deb 工件；对 `librga-v*` / `mpp-v*` /
+  `ffmpeg-rockchip-v*` tag 创建 GitHub Release。三个工作流结构一致，
+  只是构建目标（`librga-debs` / `mpp-debs` / `ffmpeg-debs`）不同。
