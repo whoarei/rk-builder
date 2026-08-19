@@ -24,43 +24,79 @@ Debian 11 官方仓库仅提供 FFmpeg 4.3，且没有 Rockchip 的
 `AV_HWDEVICE_TYPE_RKMPP`。镜像会保留 Debian ARM64 包构成的基础 sysroot，再将
 上述 FFmpeg 6.1、MPP 和 RGA 安装到 `/opt/sysroot/usr`，供工程优先使用。
 
-## 编译父目录工程
+## 编译工程
 
-将本仓库放在目标 CMake 工程的 `rk-builder/` 目录后：
-
-```bash
-./rk-builder/build.sh
-./rk-builder/build.sh -d
-```
-
-默认产物位于 `rk-builder/build/release/` 或 `rk-builder/build/debug/`。也可编译其他
-CMake 工程：
+在目标 CMake 工程目录下执行（输出产物在工程的 `build/release/` 或
+`build/debug/`）：
 
 ```bash
-PROJECT_DIR=/path/to/project ./build.sh --rebuild-image
+/path/to/rk-builder/build.sh
+/path/to/rk-builder/build.sh -d
 ```
+
+也可以通过位置参数指定工程目录：
+
+```bash
+./build.sh /path/to/project
+```
+
+镜像选择规则（`auto` 模式，默认）：
+
+1. 本地已有 GHCR 镜像（默认 `ghcr.io/whoarei/rk-builder:latest`）则直接使用；
+2. 否则使用本地编译镜像 `rk-builder:debian11-arm64`；
+3. 两者都不存在时拉取 GHCR 镜像；
+4. 拉取失败则回退到本地编译镜像。
 
 向 CMake 传递额外参数：
 
 ```bash
-./rk-builder/build.sh -- -DASLAI_BUILD_UNITTESTS=OFF
+./build.sh -- -DASLAI_BUILD_UNITTESTS=OFF
 ```
 
-使用 GitHub Container Registry 镜像：
+强制拉取 GHCR 镜像或本地编译镜像：
 
 ```bash
-RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest \
-    ./rk-builder/build.sh --pull-image
+./build.sh --pull-image
+./build.sh --rebuild-image
 ```
 
-## 单独生成 librga deb
+## 单独生成 deb 包
+
+librga / rockchip-mpp / ffmpeg-rockchip 三个组件都会打成 ARM64 deb
+发布到 GitHub Release，镜像构建时优先复用这些预编译 deb，只有缺失或
+版本不匹配时才从源码编译。
+
+本地导出全部 deb（通过 Docker 多阶段构建）：
 
 ```bash
-./scripts/build-librga-deb.sh
+docker build --target debs --output type=local,dest=dist .
+# 产物在 dist/out/ 下
 ```
 
-输出为 `dist/librga-dev_1.10.6_arm64.deb`和 SHA-256 文件。在仓库推送
-`librga-v1.10.6` tag 时，GitHub Actions 会自动创建 Release 并上传这两个文件。
+也可以单独导出某个组件：
+
+```bash
+docker build --target librga-debs --output type=local,dest=dist .
+docker build --target mpp-debs --output type=local,dest=dist .
+docker build --target ffmpeg-debs --output type=local,dest=dist .
+# 单独导出时 deb 直接在 dist/ 下
+```
+
+输出到 `dist/` 目录，例如：
+
+- `librga-dev_1.10.6_arm64.deb`
+- `rockchip-mpp-dev_1.1.0_arm64.deb`
+- `ffmpeg-rockchip-dev_6.1_arm64.deb`
+
+推送对应 tag 会触发 GitHub Actions 构建 deb 并发布 Release：
+
+- `librga-v1.10.6` → librga deb
+- `mpp-v1.1.0` → rockchip-mpp deb
+- `ffmpeg-rockchip-v6.1` → ffmpeg-rockchip deb
+
+镜像构建默认开启 `USE_LOCAL_DEBS=ON`：优先用本地 `dist/` 里的 deb，其次
+GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强制
+总是从源码编译。
 
 ## GitHub Actions
 
@@ -74,6 +110,6 @@ RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest \
 交叉编译产物不能在 x86_64 宿主机直接运行。例如：
 
 ```bash
-scp rk-builder/build/release/aslai-dispfilter root@172.16.0.249:/tmp/
+scp build/release/aslai-dispfilter root@172.16.0.249:/tmp/
 ssh root@172.16.0.249 /tmp/aslai-dispfilter --help
 ```

@@ -1,0 +1,10 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib/aarch64-linux-gnu
+includedir=${prefix}/@INCLUDEDIR@
+
+Name: rockchip_mpp
+Description: Rockchip MPP hardware media codec library
+Version: @PC_VERSION@
+Libs: -L${libdir} -lrockchip_mpp
+Cflags: -I${includedir}

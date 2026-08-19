@@ -1,42 +1,127 @@
 # syntax=docker/dockerfile:1
 
+# =============================================================================
+# rk-builder：Rockchip ARM64 交叉编译环境
+#
+# 在 x86_64(amd64) 构建机上,交叉编译出面向 Rockchip ARM64 平台的
+# librga / rockchip-mpp / ffmpeg-rockchip,并组装一个可复用的
+# aarch64 sysroot + 交叉工具链镜像,用于编译依赖 RK 硬件编解码的上层项目
+# (如 OBS、GStreamer 插件等)。
+#
+# 多阶段构建概览:
+#   1. librga-deb      打包 librga deb(官方预编译库)
+#   2. mpp-deb         交叉编译 Rockchip MPP 并打包 deb
+#   3. base-sysroot    下载 arm64 Debian 依赖并组装基础 sysroot
+#   4. arm64-sysroot   base-sysroot + librga/mpp deb
+#   5. ffmpeg-deb      基于 arm64-sysroot 交叉编译 ffmpeg-rockchip 并打包 deb
+#   6. full-sysroot    arm64-sysroot + ffmpeg deb(最终镜像用的完整 sysroot)
+#   7. 最终镜像        交叉工具链 + full-sysroot + 入口脚本
+#
+# 构建开关:
+#   USE_LOCAL_DEBS=ON (默认)  若 dist/ 或 GitHub Release 已有对应版本的
+#   librga/mpp/ffmpeg deb,则直接解包进 sysroot,跳过阶段 1-3 的源码编译;
+#   否则自动从源码编译。USE_LOCAL_DEBS=OFF 强制总是从源码编译。
+# =============================================================================
+
+# 基础系统版本,默认 Debian 11(bullseye)
 ARG DEBIAN_RELEASE=bullseye
 
+# -----------------------------------------------------------------------------
+# 阶段 1: 构建 librga 的 .deb 包
+# librga 是 Rockchip 的 2D 图像加速库(RGA),ffmpeg-rockchip 的 rkrga 依赖它。
+# 打成 deb 而不是直接编译安装,是为了后面能干净地解包进 arm64 sysroot。
+# -----------------------------------------------------------------------------
 FROM debian:${DEBIAN_RELEASE} AS librga-deb
 
 ARG DEBIAN_FRONTEND=noninteractive
+# librga 的版本号与上游 commit,两者需对应
 ARG LIBRGA_VERSION=1.10.6
 ARG LIBRGA_COMMIT=2b32edcb97b601b25683e2941d888c8515da6d55
 
+# 安装打包所需的最小工具集:dpkg-dev 提供 dpkg-deb,git 用于拉取源码
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates dpkg-dev git \
     && rm -rf /var/lib/apt/lists/*
 
+# 本地维护的 debian 打包文件(control/rules 等)与打包脚本
 COPY librga/ /opt/rk-builder/librga/
 COPY scripts/build-librga-deb.sh /usr/local/bin/build-librga-deb
+COPY scripts/lib-deb-common.sh /usr/local/bin/lib-deb-common.sh
 
+# 执行打包,产物输出到 /out/*.deb
 RUN LIBRGA_VERSION="$LIBRGA_VERSION" \
     LIBRGA_COMMIT="$LIBRGA_COMMIT" \
     PACKAGING_DIR=/opt/rk-builder/librga \
     OUT_DIR=/out \
     build-librga-deb
 
-FROM debian:${DEBIAN_RELEASE} AS arm64-sysroot
+# -----------------------------------------------------------------------------
+# 阶段 2: 交叉编译 Rockchip MPP 并打包 deb
+# MPP(Media Process Platform)是 Rockchip 的硬件编解码库,
+# ffmpeg-rockchip 的 rkmpp 编解码器依赖它。打成 deb 以便复用与发布。
+# -----------------------------------------------------------------------------
+
+FROM debian:${DEBIAN_RELEASE} AS mpp-deb
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG MPP_REPOSITORY=https://github.com/rockchip-linux/mpp.git
+ARG MPP_COMMIT=c08762ebfadeb4e986d2fed993bc7a54862d3ebe
+ARG MPP_VERSION=1.1.0
+ARG MPP_PC_VERSION=1.3.10
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        cmake \
+        crossbuild-essential-arm64 \
+        dpkg-dev \
+        git \
+        make \
+        ninja-build \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# MPP 只需要基础 sysroot(编译时只需头文件/基础 libc),复用阶段 4 的精简
+# sysroot 会循环依赖,所以这里只给编译器一个最小环境。
+# 实际 sysroot 由阶段 4 组装后,再让 ffmpeg 阶段使用。
+# 这里我们先编译到一个不含 Debian arm64 库的“空 sysroot”,
+# 因为 MPP 只依赖 libc/libstdc++/libdrm(后两者可选)。
+# 为保持简单与可复现,直接挂载一个仅含编译器与 Debian 头文件的最小根。
+
+COPY mpp/ /opt/rk-builder/mpp/
+COPY scripts/build-mpp-deb.sh /usr/local/bin/build-mpp-deb
+COPY scripts/lib-deb-common.sh /usr/local/bin/lib-deb-common.sh
+
+# MPP 只依赖 libc/libstdc++,不依赖阶段 4 的 sysroot。
+# 产物输出到 /out/*.deb
+RUN MPP_VERSION="$MPP_VERSION" \
+    MPP_PC_VERSION="$MPP_PC_VERSION" \
+    MPP_COMMIT="$MPP_COMMIT" \
+    MPP_REPOSITORY="$MPP_REPOSITORY" \
+    PACKAGING_DIR=/opt/rk-builder/mpp \
+    OUT_DIR=/out \
+    build-mpp-deb
+
+# -----------------------------------------------------------------------------
+# 阶段 3: 交叉编译 ffmpeg-rockchip 并打包 deb
+# nyanmisaka 维护的 FFmpeg fork,集成了 Rockchip 硬件编解码(rkmpp)
+# 与 RGA 图像加速(rkrga)。依赖 librga/mpp 和 libdrm,
+# 需要一个有完整运行库的 sysroot 才能通过 configure 的试编译检查。
+# -----------------------------------------------------------------------------
+
+FROM debian:${DEBIAN_RELEASE} AS base-sysroot
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Download the complete Debian 11 ARM64 dependency closure without installing
-# it. Foreign postinst scripts (notably Python pulled by OpenCV/VTK) must never
-# execute on the amd64 builder. dpkg-deb then creates a pure target sysroot.
+# 只下载不安装 Debian 11 的 ARM64 依赖闭包。
+# 注意:排除所有 FFmpeg 相关包(包括运行库),因为后面会用 ffmpeg-rockchip
+# 覆盖;否则 pkg-config 可能找到 Debian FFmpeg 4.3 的 .pc 文件。
+# libmpv-dev 依赖 FFmpeg 运行库,安装后需要手动清理。
 RUN dpkg --add-architecture arm64 \
     && apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
     && apt-get install -y --download-only --no-install-recommends \
         libarchive-dev:arm64 \
-        libavcodec-dev:arm64 \
-        libavdevice-dev:arm64 \
-        libavfilter-dev:arm64 \
-        libavformat-dev:arm64 \
-        libavutil-dev:arm64 \
         libcurl4-openssl-dev:arm64 \
         libdrm-dev:arm64 \
         libegl1-mesa-dev:arm64 \
@@ -51,21 +136,30 @@ RUN dpkg --add-architecture arm64 \
         libopencv-dev:arm64 \
         libsqlite3-dev:arm64 \
         libssl-dev:arm64 \
-        libswscale-dev:arm64 \
         libudev-dev:arm64 \
         libzmq3-dev:arm64 \
     && mkdir -p /opt/sysroot \
     && for archive in /var/cache/apt/archives/*.deb; do \
         architecture="$(dpkg-deb --field "$archive" Architecture)"; \
         if [ "$architecture" = arm64 ] || [ "$architecture" = all ]; then \
-            dpkg-deb --extract "$archive" /opt/sysroot; \
+        dpkg-deb --extract "$archive" /opt/sysroot; \
         fi; \
     done \
-    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+    && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \
+    # 排除 Debian FFmpeg 的 pkg-config 和头文件,防止与 ffmpeg-rockchip 冲突。
+    # 这些文件可能不存在(取决于 libmpv-dev 的依赖链),用 || true 容忍。
+    && (rm -f /opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig/libav*.pc \
+        /opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig/libsw*.pc || true) \
+    && (rm -rf /opt/sysroot/usr/include/aarch64-linux-gnu/libavcodec \
+        /opt/sysroot/usr/include/aarch64-linux-gnu/libavdevice \
+        /opt/sysroot/usr/include/aarch64-linux-gnu/libavfilter \
+        /opt/sysroot/usr/include/aarch64-linux-gnu/libavformat \
+        /opt/sysroot/usr/include/aarch64-linux-gnu/libavutil \
+        /opt/sysroot/usr/include/aarch64-linux-gnu/libswresample \
+        /opt/sysroot/usr/include/aarch64-linux-gnu/libswscale || true)
 
-# Debian development packages contain absolute links such as
-# /usr/lib/aarch64-linux-gnu/libpthread.so -> /lib/aarch64-linux-gnu/....
-# Rewrite them relative to the sysroot so the cross linker cannot escape it.
+# Debian 的开发包里含有指向根目录的绝对符号链接,统一改写为 sysroot 内
+# 相对路径,防止交叉链接器顺着绝对路径“逃出” sysroot。
 RUN find /opt/sysroot -type l -lname '/*' -exec sh -c '\
         for link do \
             target=$(readlink "$link"); \
@@ -74,66 +168,100 @@ RUN find /opt/sysroot -type l -lname '/*' -exec sh -c '\
         done \
     ' sh {} +
 
-COPY --from=librga-deb /out/ /tmp/librga/
-RUN dpkg-deb --extract /tmp/librga/*.deb /opt/sysroot \
-    && rm -rf /tmp/librga
+# -----------------------------------------------------------------------------
+# 阶段 4b: 在 base-sysroot 之上安装 librga/mpp deb。
+# ffmpeg-deb 阶段基于本阶段(需要完整 sysroot 做 configure 试编译),
+# ffmpeg deb 的安装放到 full-sysroot 阶段,避免循环依赖。
+# -----------------------------------------------------------------------------
 
-FROM debian:${DEBIAN_RELEASE} AS rockchip-mpp
+FROM base-sysroot AS arm64-sysroot
+
+ARG USE_LOCAL_DEBS=ON
+ARG LIBRGA_VERSION=1.10.6
+ARG MPP_VERSION=1.1.0
+ARG FFMPEG_VERSION=6.1
+ARG DEBS_BASE_URL=https://github.com/whoarei/rk-builder/releases/download
+
+# 安装 librga/mpp/ffmpeg deb。优先使用本地 dist/ 目录,其次 GitHub Release,
+# 都没有时从源码编译。
+# dist/ 必须在 build context 里(.dockerignore 不排除它)。
+# 如果 dist/ 不存在,COPY 会失败,所以确保仓库里 dist/ 目录存在(哪怕是空的)。
+COPY dist/ /tmp/dist-local/
+COPY --from=librga-deb /out/ /tmp/dist-build/librga/
+COPY --from=mpp-deb /out/ /tmp/dist-build/mpp/
+
+RUN set -e; \
+    fetch_deb() { \
+        local name="$1" version="$2" release_tag="$3" outdir="$4"; \
+        local file="${name}_${version}_arm64.deb"; \
+        if [ "$USE_LOCAL_DEBS" = "ON" ] && [ -f "/tmp/dist-local/$file" ]; then \
+            echo "Using local dist/$file"; \
+            cp "/tmp/dist-local/$file" "$outdir/"; \
+        elif [ "$USE_LOCAL_DEBS" = "ON" ] \
+            && curl -fsSL "$DEBS_BASE_URL/$release_tag/$file" -o "$outdir/$file" \
+            && [ -s "$outdir/$file" ]; then \
+            echo "Downloaded $file from release $release_tag"; \
+            # 有 sha256 则校验,没有则跳过(老 release 可能没传)
+            if curl -fsSL "$DEBS_BASE_URL/$release_tag/$file.sha256" -o "$outdir/$file.sha256" \
+                && [ -s "$outdir/$file.sha256" ]; then \
+                (cd "$outdir" && sha256sum --check "$file.sha256"); \
+            fi; \
+        else \
+            local build_dir; \
+            case "$name" in \
+                librga-dev) build_dir=/tmp/dist-build/librga ;; \
+                rockchip-mpp-dev) build_dir=/tmp/dist-build/mpp ;; \
+            esac; \
+            echo "Using source-built $file"; \
+            cp "$build_dir/$file" "$outdir/"; \
+        fi; \
+    }; \
+    mkdir -p /tmp/debs; \
+    fetch_deb librga-dev "$LIBRGA_VERSION" "librga-v$LIBRGA_VERSION" /tmp/debs; \
+    fetch_deb rockchip-mpp-dev "$MPP_VERSION" "mpp-v$MPP_VERSION" /tmp/debs; \
+    for deb in /tmp/debs/*.deb; do \
+        dpkg-deb --extract "$deb" /opt/sysroot; \
+    done \
+    && rm -rf /tmp/dist-local /tmp/dist-build /tmp/debs
+
+# -----------------------------------------------------------------------------
+# 阶段 4c: 完整 sysroot = arm64-sysroot + ffmpeg deb。
+# 最终镜像用这个,用户链接时能找到所有 Rockchip 相关库。
+# -----------------------------------------------------------------------------
+
+FROM arm64-sysroot AS ffmpeg-deb
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG MPP_REPOSITORY=https://github.com/rockchip-linux/mpp.git
-ARG MPP_COMMIT=c08762ebfadeb4e986d2fed993bc7a54862d3ebe
+ARG FFMPEG_ROCKCHIP_REPOSITORY=https://github.com/nyanmisaka/ffmpeg-rockchip.git
+ARG FFMPEG_ROCKCHIP_COMMIT=d547c18f18c744bc5e2180ce028fe1a6bd23ddad
+ARG FFMPEG_VERSION=6.1
 
+# arm64-sysroot 阶段已包含完整的 Debian arm64 sysroot + librga/mpp deb,
+# 无需额外安装。
+
+# 安装编译工具(arm64-sysroot 阶段只有 sysroot,没有交叉编译器)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
-        cmake \
         crossbuild-essential-arm64 \
+        dpkg-dev \
         git \
         make \
-        ninja-build \
+        nasm \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
-
-COPY --from=arm64-sysroot /opt/sysroot/ /opt/sysroot/
 
 ENV PKG_CONFIG_DIR="" \
     PKG_CONFIG_PATH="" \
     PKG_CONFIG_LIBDIR=/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/lib/pkgconfig:/opt/sysroot/usr/share/pkgconfig \
     PKG_CONFIG_SYSROOT_DIR=/opt/sysroot
 
-# Rockchip MPP 1.1.0 advertises rockchip_mpp 1.3.10, satisfying the
-# ffmpeg-rockchip 6.1 requirement (rockchip_mpp >= 1.3.9).
-RUN git init --quiet /src/mpp \
-    && git -C /src/mpp remote add origin "$MPP_REPOSITORY" \
-    && git -C /src/mpp fetch --quiet --depth 1 origin "$MPP_COMMIT" \
-    && git -C /src/mpp checkout --quiet --detach FETCH_HEAD \
-    && test "$(git -C /src/mpp rev-parse HEAD)" = "$MPP_COMMIT" \
-    && cmake -S /src/mpp -B /build/mpp -G Ninja \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_SYSTEM_NAME=Linux \
-        -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-        -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-        -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
-        -DCMAKE_SYSROOT=/opt/sysroot \
-        -DCMAKE_FIND_ROOT_PATH=/opt/sysroot \
-        -DCMAKE_FIND_ROOT_PATH_MODE_PROGRAM=NEVER \
-        -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
-        -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
-        -DCMAKE_FIND_ROOT_PATH_MODE_PACKAGE=ONLY \
-        -DCMAKE_INSTALL_PREFIX=/usr \
-        -DCMAKE_INSTALL_LIBDIR=lib/aarch64-linux-gnu \
-        -DBUILD_SHARED_LIBS=ON \
-        -DBUILD_TEST=OFF \
-    && cmake --build /build/mpp --parallel \
-    && DESTDIR=/opt/sysroot cmake --install /build/mpp \
-    && test "$(pkg-config --modversion rockchip_mpp)" = 1.3.10
+COPY ffmpeg-rockchip/ /opt/rk-builder/ffmpeg-rockchip/
+COPY scripts/build-ffmpeg-rockchip-deb.sh /usr/local/bin/build-ffmpeg-rockchip-deb
+COPY scripts/lib-deb-common.sh /usr/local/bin/lib-deb-common.sh
 
-FROM rockchip-mpp AS rockchip-media
-
-ARG FFMPEG_ROCKCHIP_REPOSITORY=https://github.com/nyanmisaka/ffmpeg-rockchip.git
-ARG FFMPEG_ROCKCHIP_COMMIT=d547c18f18c744bc5e2180ce028fe1a6bd23ddad
-
+# 编译 ffmpeg 到 /tmp/install,然后交给打包脚本生成 deb。
+# configure 选项与之前 Dockerfile 保持一致。
 RUN git init --quiet /src/ffmpeg-rockchip \
     && git -C /src/ffmpeg-rockchip remote add origin "$FFMPEG_ROCKCHIP_REPOSITORY" \
     && git -C /src/ffmpeg-rockchip fetch --quiet --depth 1 origin "$FFMPEG_ROCKCHIP_COMMIT" \
@@ -163,14 +291,71 @@ RUN git init --quiet /src/ffmpeg-rockchip \
     && grep -q '^#define CONFIG_RKMPP 1' config.h \
     && grep -q '^#define CONFIG_RKRGA 1' config.h \
     && make -j"$(nproc)" \
-    && make DESTDIR=/opt/sysroot install \
-    && test "$(pkg-config --modversion libavutil)" = 58.29.100 \
-    && rm -rf /src /build
+    && make DESTDIR=/tmp/install install \
+    && test "$(PKG_CONFIG_SYSROOT_DIR=/tmp/install \
+        PKG_CONFIG_LIBDIR=/tmp/install/usr/lib/aarch64-linux-gnu/pkgconfig \
+        pkg-config --modversion libavutil)" = 58.29.100
+
+# 打包步骤独立出来,避免被 ffmpeg 编译的大量输出淹没,方便排查。
+RUN BUILD_INPUT=/tmp/install \
+    FFMPEG_VERSION="$FFMPEG_VERSION" \
+    FFMPEG_SRC_DIR=/src/ffmpeg-rockchip \
+    PACKAGING_DIR=/opt/rk-builder/ffmpeg-rockchip \
+    OUT_DIR=/out \
+    build-ffmpeg-rockchip-deb
+
+# -----------------------------------------------------------------------------
+# 阶段 4: 组装 arm64 sysroot
+# sysroot 是交叉编译的目标环境根目录,包含 arm64 的头文件和库,
+# 交叉链接器只在这里面找依赖,保证不会误用宿主机的 amd64 库。
+#
+# 若 dist/ 或 GHCR Release 已提供对应版本的 librga/mpp/ffmpeg deb,
+# 则直接解包;否则回退到从源码编译(阶段 1-3)。
+# -----------------------------------------------------------------------------
+
+FROM arm64-sysroot AS full-sysroot
+
+COPY --from=ffmpeg-deb /out/ /tmp/debs-ffmpeg/
+RUN for deb in /tmp/debs-ffmpeg/*.deb; do \
+        dpkg-deb --extract "$deb" /opt/sysroot; \
+    done \
+    && rm -rf /tmp/debs-ffmpeg
+
+# -----------------------------------------------------------------------------
+# 汇总阶段: 把三个 deb 收集到 /out,方便 CI 用
+#   docker build --target debs --output type=local,dest=dist .
+# 一条命令导出全部 deb。
+# -----------------------------------------------------------------------------
+
+FROM scratch AS debs
+COPY --from=librga-deb /out/ /out/
+COPY --from=mpp-deb /out/ /out/
+COPY --from=ffmpeg-deb /out/ /out/
+
+# 单独导出每个 deb 的 scratch 阶段,供各 release workflow 用
+# --target librga-debs / mpp-debs / ffmpeg-debs 导出。
+# 这些阶段只包含 /out 目录,--output type=local 导出干净。
+FROM scratch AS librga-debs
+COPY --from=librga-deb /out/ /
+
+FROM scratch AS mpp-debs
+COPY --from=mpp-deb /out/ /
+
+FROM scratch AS ffmpeg-debs
+COPY --from=ffmpeg-deb /out/ /
+
+# -----------------------------------------------------------------------------
+# 阶段 5: 最终镜像
+# 交叉工具链 + 完整 arm64 sysroot + CMake toolchain 文件 + 入口脚本。
+# 使用方式大致是:挂载源码目录到 /workspace/project,
+# 容器入口脚本会带着交叉编译环境执行构建命令。
+# -----------------------------------------------------------------------------
 
 FROM debian:${DEBIAN_RELEASE}
 
 ARG DEBIAN_FRONTEND=noninteractive
 
+# 最终镜像里的构建工具:交叉编译器、CMake/Ninja、ccache(加速重复构建)
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -183,10 +368,15 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=rockchip-media /opt/sysroot/ /opt/sysroot/
+# 拷入包含 librga + mpp + ffmpeg-rockchip 的完整 sysroot
+COPY --from=full-sysroot /opt/sysroot/ /opt/sysroot/
+# aarch64 的 CMake toolchain 文件(指定编译器、sysroot、find 规则)
 COPY cmake/aarch64-linux-gnu.cmake /opt/rk-builder/aarch64-linux-gnu.cmake
 COPY scripts/entrypoint.sh /usr/local/bin/rk-cross-build
 
+# 构建期自检,尽早暴露 sysroot 问题:
+#   1. 关键动态库确实是 AArch64 架构(防止混进 amd64 库)
+#   2. FFmpeg 头文件里确实包含 RKMPP 硬件设备类型
 RUN chmod 0755 /usr/local/bin/rk-cross-build \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/lib/aarch64-linux-gnu/librga.so \
         | grep -q AArch64 \
@@ -197,6 +387,9 @@ RUN chmod 0755 /usr/local/bin/rk-cross-build \
     && grep -q AV_HWDEVICE_TYPE_RKMPP \
         /opt/sysroot/usr/include/aarch64-linux-gnu/libavutil/hwcontext.h
 
+# 运行时环境:
+#   ccache 缓存目录指向挂载卷,跨容器构建也能命中缓存
+#   pkg-config 配置同阶段 3,保证使用者的构建也只查 sysroot
 ENV CCACHE_DIR=/workspace/ccache \
     CCACHE_MAXSIZE=2G \
     PKG_CONFIG_DIR="" \

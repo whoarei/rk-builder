@@ -1,0 +1,2 @@
+# 占位文件,确保 dist/ 目录在 git 里存在。
+# Dockerfile 的 COPY dist/ 要求该目录不为空,否则 CI 上构建会失败。

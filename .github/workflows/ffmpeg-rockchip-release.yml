@@ -1,8 +1,8 @@
-name: Build librga deb
+name: Build ffmpeg-rockchip deb
 
 on:
   push:
-    tags: ["librga-v*"]
+    tags: ["ffmpeg-rockchip-v*"]
   workflow_dispatch:
 
 permissions:
@@ -16,15 +16,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Export librga deb
+      - name: Export ffmpeg deb
         run: |
-          docker build --target librga-debs --output type=local,dest="$PWD/dist" .
+          docker build --target ffmpeg-debs --output type=local,dest="$PWD/dist" .
           ls -la dist/
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: librga-dev-arm64
+          name: ffmpeg-rockchip-dev-arm64
           path: |
             dist/*.deb
             dist/*.sha256
@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
-          dist/librga-dev_*.deb dist/librga-dev_*.sha256
+          dist/ffmpeg-rockchip-dev_*.deb dist/ffmpeg-rockchip-dev_*.sha256
           --verify-tag
           --generate-notes
-          --title "librga 1.10.6 ARM64 Debian package"
+          --title "ffmpeg-rockchip 6.1 ARM64 Debian package"
