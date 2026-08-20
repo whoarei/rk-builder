@@ -182,7 +182,7 @@ FROM base-sysroot AS arm64-sysroot
 ARG USE_LOCAL_DEBS=ON
 ARG LIBRGA_VERSION=1.10.6
 ARG MPP_VERSION=1.1.0
-ARG FFMPEG_VERSION=6.1
+ARG FFMPEG_VERSION=6.1.0-1
 ARG DEBS_BASE_URL=https://github.com/whoarei/rk-builder/releases/download
 
 # 安装 librga/mpp/ffmpeg deb。优先使用本地 dist/ 目录,其次 GitHub Release,
@@ -239,7 +239,7 @@ FROM arm64-sysroot AS ffmpeg-deb
 ARG DEBIAN_FRONTEND=noninteractive
 ARG FFMPEG_ROCKCHIP_REPOSITORY=https://github.com/nyanmisaka/ffmpeg-rockchip.git
 ARG FFMPEG_ROCKCHIP_COMMIT=d547c18f18c744bc5e2180ce028fe1a6bd23ddad
-ARG FFMPEG_VERSION=6.1
+ARG FFMPEG_VERSION=6.1.0-1
 
 # arm64-sysroot 阶段已包含完整的 Debian arm64 sysroot + librga/mpp deb,
 # 无需额外安装。

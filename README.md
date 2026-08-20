@@ -30,39 +30,65 @@ Debian 11 官方仓库仅提供 FFmpeg 4.3，且没有 Rockchip 的
 
 ## 编译工程
 
-在目标 CMake 工程目录下执行（输出产物在工程的 `build/release/` 或
-`build/debug/`）：
+使用远程 GHCR 镜像编译。若镜像已存在于本地则直接使用，否则自动拉取：
 
 ```bash
-/path/to/rk-builder/build.sh
-/path/to/rk-builder/build.sh -d
+/path/to/rk-builder/rk-builder.sh /path/to/project
+/path/to/rk-builder/rk-builder.sh -d /path/to/project
 ```
 
-也可以通过位置参数指定工程目录：
+未指定 `PROJECT_DIR` 时，默认编译当前目录。输出产物在工程的
+`build/release/` 或 `build/debug/`：
 
 ```bash
-./build.sh /path/to/project
+cd /path/to/project
+/path/to/rk-builder/rk-builder.sh
 ```
-
-镜像选择规则（`auto` 模式，默认）：
-
-1. 本地已有 GHCR 镜像（默认 `ghcr.io/whoarei/rk-builder:latest`）则直接使用；
-2. 否则使用本地编译镜像 `rk-builder:debian11-arm64`；
-3. 两者都不存在时拉取 GHCR 镜像；
-4. 拉取失败则回退到本地编译镜像。
 
 向 CMake 传递额外参数：
 
 ```bash
-./build.sh -- -DASLAI_BUILD_UNITTESTS=OFF
+./rk-builder.sh /path/to/project -- -DASLAI_BUILD_UNITTESTS=OFF
 ```
 
-强制拉取 GHCR 镜像或本地编译镜像：
+脚本或自动化任务可添加 `--script`，保留环境信息输出但跳过用户确认：
 
 ```bash
-./build.sh --pull-image
-./build.sh --rebuild-image
+./rk-builder.sh --script /path/to/project
+./rk-builder-local.sh --script /path/to/project
 ```
+
+需要从本仓库的 Dockerfile 重新构建本地镜像时，使用
+`rk-builder-local.sh`；其项目目录和 CMake 参数用法相同：
+
+```bash
+./rk-builder-local.sh /path/to/project
+./rk-builder-local.sh -d /path/to/project -- -DFOO=ON
+```
+
+### 在其他项目中使用
+
+将仓库根目录的 `rk-builder.sh` 复制到任意 CMake 项目根目录即可使用。脚本不依赖
+本仓库中的其他文件；本地不存在指定镜像时会自动拉取，并将编译产物写入当前项目：
+
+```bash
+cp /path/to/rk-builder/rk-builder.sh /path/to/project/
+cd /path/to/project
+./rk-builder.sh
+./rk-builder.sh -d
+./rk-builder.sh -- -DFOO=ON
+```
+
+默认远程镜像为 `ghcr.io/whoarei/rk-builder:latest`。可通过环境变量覆盖镜像
+或并行任务数：
+
+```bash
+RK_BUILDER_IMAGE=ghcr.io/example/rk-builder:v1 JOBS=8 ./rk-builder.sh
+```
+
+`build.sh` 仅作为旧命令的兼容入口保留；新项目应直接使用上述两个脚本。
+两个脚本都会在编译项目前打印镜像、工程目录、构建类型、并行数和 CMake 参数，
+并在交互式终端中等待确认；`--script` 或 CI 等非交互环境会自动跳过确认。
 
 ## 单独生成 deb 包
 
@@ -72,9 +98,9 @@ librga / rockchip-mpp / ffmpeg-rockchip 每个组件都会产出两个 ARM64 deb
 链接器符号链接、pkg-config）。所有包统一安装到 `/usr/local/ans`，
 `/usr/local` 在动态链接器搜索顺序中优先于 `/usr`，因此目标设备上
 安装的库会覆盖 Debian 自带的同名库。
-运行包会安装 `/etc/ld.so.conf.d/00-ans-*.conf` 并调用 `ldconfig`；
-`ffmpeg-rockchip` 还会在 `/usr/local/bin` 创建命令链接，因此安装后可直接
-执行 `ffmpeg`、`ffprobe` 等程序。
+运行包会安装 `/etc/ld.so.conf.d/00-ans-*.conf` 并调用 `ldconfig`。
+`ffmpeg-rockchip` 的程序安装在 `/usr/local/ans/bin`，不会在
+`/usr/local/bin` 创建命令链接。
 
 运行包 / 开发包对应关系：
 
@@ -105,13 +131,13 @@ docker build --target ffmpeg-debs --output type=local,dest=dist .
 
 - `librga_1.10.6_arm64.deb`、`librga-dev_1.10.6_arm64.deb`
 - `rockchip-mpp_1.1.0_arm64.deb`、`rockchip-mpp-dev_1.1.0_arm64.deb`
-- `ffmpeg-rockchip_6.1_arm64.deb`、`ffmpeg-rockchip-dev_6.1_arm64.deb`
+- `ffmpeg-rockchip_6.1.0-1_arm64.deb`、`ffmpeg-rockchip-dev_6.1.0-1_arm64.deb`
 
 推送对应 tag 会触发 GitHub Actions 构建 deb 并发布 Release：
 
 - `librga-v1.10.6` → librga deb
 - `mpp-v1.1.0` → rockchip-mpp deb
-- `ffmpeg-rockchip-v6.1` → ffmpeg-rockchip deb
+- `ffmpeg-rockchip-v6.1.0-1` → ffmpeg-rockchip deb
 
 镜像构建默认开启 `USE_LOCAL_DEBS=ON`：优先用本地 `dist/` 里的 deb，其次
 GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强制

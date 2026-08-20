@@ -21,7 +21,7 @@ set -euo pipefail
 _script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$_script_dir/lib-deb-common.sh"
 
-FFMPEG_VERSION=${FFMPEG_VERSION:-6.1}
+FFMPEG_VERSION=${FFMPEG_VERSION:-6.1.0-1}
 FFMPEG_COMMIT=${FFMPEG_COMMIT:-d547c18f18c744bc5e2180ce028fe1a6bd23ddad}
 FFMPEG_REPOSITORY=${FFMPEG_REPOSITORY:-https://github.com/nyanmisaka/ffmpeg-rockchip.git}
 BUILD_INPUT=${BUILD_INPUT:-}
@@ -68,12 +68,6 @@ mkdir -p \
 cp -a "$INSTALL_DIR$PREFIX/lib" "$RUNTIME_ROOT$PREFIX/"
 if [[ -d $INSTALL_DIR$PREFIX/bin ]]; then
     cp -a "$INSTALL_DIR$PREFIX/bin" "$RUNTIME_ROOT$PREFIX/"
-    mkdir -p "$RUNTIME_ROOT/usr/local/bin"
-    for program in "$INSTALL_DIR$PREFIX/bin/"*; do
-        [[ -f $program && -x $program ]] || continue
-        ln -s "$PREFIX/bin/$(basename "$program")" \
-            "$RUNTIME_ROOT/usr/local/bin/$(basename "$program")"
-    done
 fi
 rm -rf "$RUNTIME_ROOT$PREFIX/lib/pkgconfig"
 # 开发用链接器符号链接(libfoo.so)不进运行包

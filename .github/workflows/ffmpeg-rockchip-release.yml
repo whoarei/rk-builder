@@ -38,9 +38,10 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" \
               dist/ffmpeg-rockchip*.deb dist/ffmpeg-rockchip*.sha256 --clobber
           else
+            VERSION=${GITHUB_REF_NAME#ffmpeg-rockchip-v}
             gh release create "$GITHUB_REF_NAME" \
               dist/ffmpeg-rockchip*.deb dist/ffmpeg-rockchip*.sha256 \
               --verify-tag \
               --generate-notes \
-              --title "ffmpeg-rockchip 6.1 ARM64 Debian package"
+              --title "ffmpeg-rockchip $VERSION ARM64 Debian package"
           fi
