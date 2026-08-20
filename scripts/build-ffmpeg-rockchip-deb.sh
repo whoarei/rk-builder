@@ -68,6 +68,12 @@ mkdir -p \
 cp -a "$INSTALL_DIR$PREFIX/lib" "$RUNTIME_ROOT$PREFIX/"
 if [[ -d $INSTALL_DIR$PREFIX/bin ]]; then
     cp -a "$INSTALL_DIR$PREFIX/bin" "$RUNTIME_ROOT$PREFIX/"
+    mkdir -p "$RUNTIME_ROOT/usr/local/bin"
+    for program in "$INSTALL_DIR$PREFIX/bin/"*; do
+        [[ -f $program && -x $program ]] || continue
+        ln -s "$PREFIX/bin/$(basename "$program")" \
+            "$RUNTIME_ROOT/usr/local/bin/$(basename "$program")"
+    done
 fi
 rm -rf "$RUNTIME_ROOT$PREFIX/lib/pkgconfig"
 # 开发用链接器符号链接(libfoo.so)不进运行包
@@ -80,6 +86,7 @@ deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$FFMPEG_VERSION"
     SECTION=libs \
     DEPENDS="rockchip-mpp (>= 1.1.0), librga (>= 1.10.6), libdrm2 (>= 2.4), libc6 (>= 2.17)" \
     DESCRIPTION="FFmpeg with Rockchip hardware acceleration, rkmpp/rkrga (runtime)"
+deb_add_runtime_paths "$RUNTIME_ROOT" ffmpeg-rockchip
 deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" ffmpeg-rockchip "$FFMPEG_VERSION"
 
 # ----------------------------------------------------------------------
@@ -102,4 +109,3 @@ deb_render_control "$PACKAGING_DIR/control.in" "$DEV_ROOT" "$FFMPEG_VERSION" \
     DEPENDS="ffmpeg-rockchip (= $FFMPEG_VERSION), rockchip-mpp-dev (>= 1.1.0), librga-dev (>= 1.10.6), libdrm2 (>= 2.4), libc6 (>= 2.17)" \
     DESCRIPTION="FFmpeg with Rockchip hardware acceleration, rkmpp/rkrga (development files)"
 deb_finish_package "$DEV_ROOT" "$OUT_DIR" ffmpeg-rockchip-dev "$FFMPEG_VERSION"
-

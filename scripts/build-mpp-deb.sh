@@ -47,6 +47,7 @@ else
         -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
         -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
         -DCMAKE_INSTALL_PREFIX=$PREFIX \
+        -DCMAKE_INSTALL_LIBDIR=lib \
         -DBUILD_SHARED_LIBS=ON \
         -DBUILD_TEST=OFF
     cmake --build "$WORK_DIR/build" --parallel
@@ -71,7 +72,9 @@ mkdir -p \
     "$RUNTIME_ROOT/usr/share/doc/rockchip-mpp"
 
 cp -a "$INSTALL_DIR$PREFIX/lib/." "$RUNTIME_ROOT$PREFIX/lib/"
-rm -f "$RUNTIME_ROOT$PREFIX/lib/librockchip_mpp.so"
+rm -rf "$RUNTIME_ROOT$PREFIX/lib/pkgconfig"
+find "$RUNTIME_ROOT$PREFIX/lib" -maxdepth 1 -type f -name '*.a' -delete
+find "$RUNTIME_ROOT$PREFIX/lib" -maxdepth 1 -type l -name 'lib*.so' -delete
 
 install -m 0644 "$SOURCE_DIR/LICENSES" "$RUNTIME_ROOT/usr/share/doc/rockchip-mpp/copyright" 2>/dev/null \
     || install -m 0644 "$SOURCE_DIR/LICENSE" "$RUNTIME_ROOT/usr/share/doc/rockchip-mpp/copyright" 2>/dev/null \
@@ -82,6 +85,7 @@ deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$MPP_VERSION" \
     SECTION=libs \
     DEPENDS="libc6 (>= 2.17), libstdc++6" \
     DESCRIPTION="Rockchip MPP hardware media codec library (runtime)"
+deb_add_runtime_paths "$RUNTIME_ROOT" rockchip-mpp
 deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" rockchip-mpp "$MPP_VERSION"
 
 # ----------------------------------------------------------------------
@@ -92,14 +96,10 @@ mkdir -p \
     "$DEV_ROOT/usr/share/doc/rockchip-mpp-dev"
 
 cp -a "$INSTALL_DIR$PREFIX/include" "$DEV_ROOT$PREFIX/"
-
-# 链接器用的开发链接,指向运行包里的 soname 链接
-soname_link=$(find "$RUNTIME_ROOT$PREFIX/lib" -name 'librockchip_mpp.so.*' -type l | head -1)
-if [[ -n $soname_link ]]; then
-    ln -s "$(basename "$soname_link")" "$DEV_ROOT$PREFIX/lib/librockchip_mpp.so"
-else
-    cp -a "$INSTALL_DIR$PREFIX/lib/librockchip_mpp.so" "$DEV_ROOT$PREFIX/lib/"
-fi
+find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type f -name '*.a' \
+    -exec cp -a {} "$DEV_ROOT$PREFIX/lib/" \;
+find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type l -name 'lib*.so' \
+    -exec cp -a {} "$DEV_ROOT$PREFIX/lib/" \;
 
 # MPP 上游不生成 pkg-config 文件,这里补上。
 # 头文件装在 include/rockchip/ 时,Cflags 需带上该子目录,
@@ -119,4 +119,3 @@ deb_render_control "$PACKAGING_DIR/control.in" "$DEV_ROOT" "$MPP_VERSION" \
     DEPENDS="rockchip-mpp (= $MPP_VERSION), libc6 (>= 2.17), libstdc++6" \
     DESCRIPTION="Rockchip MPP hardware media codec library (development files)"
 deb_finish_package "$DEV_ROOT" "$OUT_DIR" rockchip-mpp-dev "$MPP_VERSION"
-

@@ -30,7 +30,8 @@ DEV_ROOT="$WORK_DIR/package-dev"
 deb_fetch_source "$LIBRGA_REPOSITORY" "$LIBRGA_COMMIT" "$SOURCE_DIR"
 
 # ----------------------------------------------------------------------
-# 运行包 librga:共享库实体 + soname 链接
+# 运行包 librga:共享库实体。上游 ELF 的 SONAME 就是 librga.so，
+# 不能人为改成版本化文件，否则运行时 NEEDED=librga.so 无法解析。
 # ----------------------------------------------------------------------
 mkdir -p \
     "$RUNTIME_ROOT$PREFIX/lib" \
@@ -38,8 +39,7 @@ mkdir -p \
 
 install -m 0644 \
     "$SOURCE_DIR/libs/Linux/gcc-aarch64/librga.so" \
-    "$RUNTIME_ROOT$PREFIX/lib/librga.so.$LIBRGA_VERSION"
-ln -s "librga.so.$LIBRGA_VERSION" "$RUNTIME_ROOT$PREFIX/lib/librga.so.1"
+    "$RUNTIME_ROOT$PREFIX/lib/librga.so"
 install -m 0644 "$SOURCE_DIR/COPYING" "$RUNTIME_ROOT/usr/share/doc/librga/copyright"
 
 deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$LIBRGA_VERSION" \
@@ -47,10 +47,12 @@ deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$LIBRGA_VERSION"
     SECTION=libs \
     DEPENDS="libc6 (>= 2.17), libstdc++6" \
     DESCRIPTION="Rockchip RGA userspace library (runtime)"
+deb_add_runtime_paths "$RUNTIME_ROOT" librga
 deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" librga "$LIBRGA_VERSION"
 
 # ----------------------------------------------------------------------
-# 开发包 librga-dev:头文件 + 链接器 .so 链接 + pkg-config
+# 开发包 librga-dev:头文件 + pkg-config。
+# 链接器需要的 librga.so 由运行包提供(上游 SONAME 也是该名称)。
 # ----------------------------------------------------------------------
 mkdir -p \
     "$DEV_ROOT$PREFIX/include/rga" \
@@ -58,7 +60,6 @@ mkdir -p \
     "$DEV_ROOT/usr/share/doc/librga-dev"
 
 cp -a "$SOURCE_DIR/include/." "$DEV_ROOT$PREFIX/include/rga/"
-ln -s "librga.so.$LIBRGA_VERSION" "$DEV_ROOT$PREFIX/lib/librga.so"
 install -m 0644 "$SOURCE_DIR/COPYING" "$DEV_ROOT/usr/share/doc/librga-dev/copyright"
 
 sed "s/@VERSION@/$LIBRGA_VERSION/g" \
@@ -71,4 +72,3 @@ deb_render_control "$PACKAGING_DIR/control.in" "$DEV_ROOT" "$LIBRGA_VERSION" \
     DEPENDS="librga (= $LIBRGA_VERSION), libc6 (>= 2.17), libstdc++6" \
     DESCRIPTION="Rockchip RGA userspace library (development files)"
 deb_finish_package "$DEV_ROOT" "$OUT_DIR" librga-dev "$LIBRGA_VERSION"
-

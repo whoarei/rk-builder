@@ -23,7 +23,7 @@
 #   否则自动从源码编译。USE_LOCAL_DEBS=OFF 强制总是从源码编译。
 #
 # 打包约定:每个库产出运行包(如 rockchip-mpp)和开发包(*-dev)两个 deb,
-# 安装前缀统一为 /usr/local/ans。sysroot 只解包 *-dev 包。
+# 安装前缀统一为 /usr/local/ans。sysroot 同时解包运行包和开发包。
 # =============================================================================
 
 # 基础系统版本,默认 Debian 11(bullseye)
@@ -275,7 +275,6 @@ RUN git init --quiet /src/ffmpeg-rockchip \
     && cd /src/ffmpeg-rockchip \
     && ./configure \
         --prefix=/usr/local/ans \
-        --enable-programs \
         --arch=aarch64 \
         --target-os=linux \
         --cross-prefix=aarch64-linux-gnu- \

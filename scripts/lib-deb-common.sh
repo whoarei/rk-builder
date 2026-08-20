@@ -101,6 +101,33 @@ deb_render_control()
     sed "${sed_args[@]}" "$template" > "$package_root/DEBIAN/control"
 }
 
+# deb_add_runtime_paths <package_root> <package_name>
+#
+# 让安装在 /usr/local/ans/lib 下的运行库进入动态链接器缓存。
+# 文件名前缀 00- 确保该目录在 Debian 默认 /usr/lib 路径之前处理。
+# 每个运行包使用独立配置文件，避免不同包之间产生文件所有权冲突。
+deb_add_runtime_paths()
+{
+    local package_root=$1
+    local package_name=$2
+
+    mkdir -p "$package_root/DEBIAN" "$package_root/etc/ld.so.conf.d"
+    printf '%s\n' '/usr/local/ans/lib' \
+        > "$package_root/etc/ld.so.conf.d/00-ans-${package_name}.conf"
+
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'set -e' \
+        'ldconfig' \
+        > "$package_root/DEBIAN/postinst"
+    printf '%s\n' \
+        '#!/bin/sh' \
+        'set -e' \
+        'ldconfig' \
+        > "$package_root/DEBIAN/postrm"
+    chmod 0755 "$package_root/DEBIAN/postinst" "$package_root/DEBIAN/postrm"
+}
+
 # deb_finish_package <package_root> <out_dir> <name> <version>
 #
 # 打包收尾:

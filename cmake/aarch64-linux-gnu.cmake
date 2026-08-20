@@ -15,6 +15,7 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)
 
 set(CMAKE_PREFIX_PATH
+    "${RK_SYSROOT}/usr/local/ans"
     "${RK_SYSROOT}/usr/lib/aarch64-linux-gnu/cmake"
     "${RK_SYSROOT}/usr/lib/cmake"
     "${RK_SYSROOT}/usr/share/cmake"
@@ -23,7 +24,7 @@ set(CMAKE_PREFIX_PATH
 set(ENV{PKG_CONFIG_DIR} "")
 set(ENV{PKG_CONFIG_PATH} "")
 set(ENV{PKG_CONFIG_LIBDIR}
-    "${RK_SYSROOT}/usr/lib/aarch64-linux-gnu/pkgconfig:${RK_SYSROOT}/usr/lib/pkgconfig:${RK_SYSROOT}/usr/share/pkgconfig")
+    "${RK_SYSROOT}/usr/local/ans/lib/pkgconfig:${RK_SYSROOT}/usr/lib/aarch64-linux-gnu/pkgconfig:${RK_SYSROOT}/usr/lib/pkgconfig:${RK_SYSROOT}/usr/share/pkgconfig")
 set(ENV{PKG_CONFIG_SYSROOT_DIR} "${RK_SYSROOT}")
 
 find_program(CCACHE_PROGRAM ccache)

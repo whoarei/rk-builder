@@ -3,7 +3,6 @@ Version: @VERSION@
 Section: @SECTION@
 Priority: optional
 Architecture: arm64
-Multi-Arch: same
 Maintainer: rk-builder maintainers <whoarei@users.noreply.github.com>
 Depends: @DEPENDS@
 Homepage: https://github.com/rockchip-linux/mpp

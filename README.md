@@ -72,6 +72,9 @@ librga / rockchip-mpp / ffmpeg-rockchip 每个组件都会产出两个 ARM64 deb
 链接器符号链接、pkg-config）。所有包统一安装到 `/usr/local/ans`，
 `/usr/local` 在动态链接器搜索顺序中优先于 `/usr`，因此目标设备上
 安装的库会覆盖 Debian 自带的同名库。
+运行包会安装 `/etc/ld.so.conf.d/00-ans-*.conf` 并调用 `ldconfig`；
+`ffmpeg-rockchip` 还会在 `/usr/local/bin` 创建命令链接，因此安装后可直接
+执行 `ffmpeg`、`ffprobe` 等程序。
 
 运行包 / 开发包对应关系：
 
