@@ -108,7 +108,38 @@ case "$IMAGE_MODE" in
         ;;
 esac
 
+# Summarize the build environment and ask for confirmation before starting.
+IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || echo "unknown")
+IMAGE_CREATED=$(docker image inspect --format '{{.Created}}' "$IMAGE" 2>/dev/null || echo "unknown")
+IMAGE_DIGEST=$(docker image inspect --format '{{join .RepoDigests ", "}}' "$IMAGE" 2>/dev/null || true)
+[[ -n $IMAGE_DIGEST ]] || IMAGE_DIGEST="(none, image not pushed or pulled by digest)"
+
 BUILD_TYPE_LOWER=${BUILD_TYPE,,}
+
+cat <<EOF
+=== Build environment ===
+  Image          : $IMAGE
+  Image ID       : $IMAGE_ID
+  Image digest   : $IMAGE_DIGEST
+  Image created  : $IMAGE_CREATED
+  Project dir    : $PROJECT_DIR
+  Build dir      : $PROJECT_DIR/build/$BUILD_TYPE_LOWER
+  Build type     : $BUILD_TYPE
+  Jobs           : ${JOBS:-<auto>}
+  CMake args     : ${CMAKE_ARGS[*]:-<none>}
+===========================
+EOF
+
+if [[ -t 0 ]]; then
+    read -r -p "Proceed with the build? [Y/n] " answer
+    case "$answer" in
+        N|n)
+            echo "Build cancelled."
+            exit 0
+            ;;
+    esac
+fi
+
 mkdir -p "$PROJECT_DIR/build/$BUILD_TYPE_LOWER" "$PROJECT_DIR/.ccache"
 
 RUN_ARGS=(

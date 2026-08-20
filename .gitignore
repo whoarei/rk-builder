@@ -1,4 +1,4 @@
-/build/
-/.ccache/
+build/
+.ccache/
 /dist/*
 !/dist/.gitkeep
