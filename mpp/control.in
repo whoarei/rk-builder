@@ -1,13 +1,10 @@
-Package: rockchip-mpp-dev
+Package: @PACKAGE@
 Version: @VERSION@
-Section: libdevel
+Section: @SECTION@
 Priority: optional
 Architecture: arm64
 Multi-Arch: same
 Maintainer: rk-builder maintainers <whoarei@users.noreply.github.com>
-Depends: libc6 (>= 2.17), libstdc++6
+Depends: @DEPENDS@
 Homepage: https://github.com/rockchip-linux/mpp
-Description: Rockchip MPP hardware media codec library and development files
- MPP (Media Process Platform) is the Rockchip hardware video encoder/decoder
- userspace library. This package contains the aarch64 shared library, API
- headers and pkg-config file cross-compiled from rockchip-linux/mpp.
+Description: @DESCRIPTION@

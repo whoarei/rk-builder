@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
-          dist/librga-dev_*.deb dist/librga-dev_*.sha256
+          dist/librga*.deb dist/librga*.sha256
           --verify-tag
           --generate-notes
           --title "librga 1.10.6 ARM64 Debian package"

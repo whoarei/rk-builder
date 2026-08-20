@@ -21,6 +21,9 @@
 #   USE_LOCAL_DEBS=ON (默认)  若 dist/ 或 GitHub Release 已有对应版本的
 #   librga/mpp/ffmpeg deb,则直接解包进 sysroot,跳过阶段 1-3 的源码编译;
 #   否则自动从源码编译。USE_LOCAL_DEBS=OFF 强制总是从源码编译。
+#
+# 打包约定:每个库产出运行包(如 rockchip-mpp)和开发包(*-dev)两个 deb,
+# 安装前缀统一为 /usr/local/ans。sysroot 只解包 *-dev 包。
 # =============================================================================
 
 # 基础系统版本,默认 Debian 11(bullseye)
@@ -209,8 +212,8 @@ RUN set -e; \
         else \
             local build_dir; \
             case "$name" in \
-                librga-dev) build_dir=/tmp/dist-build/librga ;; \
-                rockchip-mpp-dev) build_dir=/tmp/dist-build/mpp ;; \
+                librga*) build_dir=/tmp/dist-build/librga ;; \
+                rockchip-mpp*) build_dir=/tmp/dist-build/mpp ;; \
             esac; \
             echo "Using source-built $file"; \
             cp "$build_dir/$file" "$outdir/"; \
@@ -219,6 +222,8 @@ RUN set -e; \
     mkdir -p /tmp/debs; \
     fetch_deb librga-dev "$LIBRGA_VERSION" "librga-v$LIBRGA_VERSION" /tmp/debs; \
     fetch_deb rockchip-mpp-dev "$MPP_VERSION" "mpp-v$MPP_VERSION" /tmp/debs; \
+    fetch_deb librga "$LIBRGA_VERSION" "librga-v$LIBRGA_VERSION" /tmp/debs; \
+    fetch_deb rockchip-mpp "$MPP_VERSION" "mpp-v$MPP_VERSION" /tmp/debs; \
     for deb in /tmp/debs/*.deb; do \
         dpkg-deb --extract "$deb" /opt/sysroot; \
     done \
@@ -253,7 +258,7 @@ RUN apt-get update \
 
 ENV PKG_CONFIG_DIR="" \
     PKG_CONFIG_PATH="" \
-    PKG_CONFIG_LIBDIR=/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/lib/pkgconfig:/opt/sysroot/usr/share/pkgconfig \
+    PKG_CONFIG_LIBDIR=/opt/sysroot/usr/local/ans/lib/pkgconfig:/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/lib/pkgconfig:/opt/sysroot/usr/share/pkgconfig \
     PKG_CONFIG_SYSROOT_DIR=/opt/sysroot
 
 COPY ffmpeg-rockchip/ /opt/rk-builder/ffmpeg-rockchip/
@@ -269,9 +274,8 @@ RUN git init --quiet /src/ffmpeg-rockchip \
     && test "$(git -C /src/ffmpeg-rockchip rev-parse HEAD)" = "$FFMPEG_ROCKCHIP_COMMIT" \
     && cd /src/ffmpeg-rockchip \
     && ./configure \
-        --prefix=/usr \
-        --libdir=/usr/lib/aarch64-linux-gnu \
-        --incdir=/usr/include/aarch64-linux-gnu \
+        --prefix=/usr/local/ans \
+        --enable-programs \
         --arch=aarch64 \
         --target-os=linux \
         --cross-prefix=aarch64-linux-gnu- \
@@ -293,7 +297,7 @@ RUN git init --quiet /src/ffmpeg-rockchip \
     && make -j"$(nproc)" \
     && make DESTDIR=/tmp/install install \
     && test "$(PKG_CONFIG_SYSROOT_DIR=/tmp/install \
-        PKG_CONFIG_LIBDIR=/tmp/install/usr/lib/aarch64-linux-gnu/pkgconfig \
+        PKG_CONFIG_LIBDIR=/tmp/install/usr/local/ans/lib/pkgconfig \
         pkg-config --modversion libavutil)" = 58.29.100
 
 # 打包步骤独立出来,避免被 ffmpeg 编译的大量输出淹没,方便排查。
@@ -378,14 +382,14 @@ COPY scripts/entrypoint.sh /usr/local/bin/rk-cross-build
 #   1. 关键动态库确实是 AArch64 架构(防止混进 amd64 库)
 #   2. FFmpeg 头文件里确实包含 RKMPP 硬件设备类型
 RUN chmod 0755 /usr/local/bin/rk-cross-build \
-    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/lib/aarch64-linux-gnu/librga.so \
+    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librga.so \
         | grep -q AArch64 \
-    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/lib/aarch64-linux-gnu/librockchip_mpp.so \
+    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librockchip_mpp.so \
         | grep -q AArch64 \
-    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/lib/aarch64-linux-gnu/libavutil.so \
+    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/libavutil.so \
         | grep -q AArch64 \
     && grep -q AV_HWDEVICE_TYPE_RKMPP \
-        /opt/sysroot/usr/include/aarch64-linux-gnu/libavutil/hwcontext.h
+        /opt/sysroot/usr/local/ans/include/libavutil/hwcontext.h
 
 # 运行时环境:
 #   ccache 缓存目录指向挂载卷,跨容器构建也能命中缓存
@@ -394,7 +398,7 @@ ENV CCACHE_DIR=/workspace/ccache \
     CCACHE_MAXSIZE=2G \
     PKG_CONFIG_DIR="" \
     PKG_CONFIG_PATH="" \
-    PKG_CONFIG_LIBDIR=/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/lib/pkgconfig:/opt/sysroot/usr/share/pkgconfig \
+    PKG_CONFIG_LIBDIR=/opt/sysroot/usr/local/ans/lib/pkgconfig:/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/lib/pkgconfig:/opt/sysroot/usr/share/pkgconfig \
     PKG_CONFIG_SYSROOT_DIR=/opt/sysroot
 
 WORKDIR /workspace/project

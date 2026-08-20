@@ -1,15 +1,10 @@
-Package: ffmpeg-rockchip-dev
+Package: @PACKAGE@
 Version: @VERSION@
-Section: libdevel
+Section: @SECTION@
 Priority: optional
 Architecture: arm64
 Multi-Arch: same
 Maintainer: rk-builder maintainers <whoarei@users.noreply.github.com>
-Depends: rockchip-mpp-dev (>= 1.1.0), librga-dev (>= 1.10.6), libdrm2 (>= 2.4), libc6 (>= 2.17)
-Conflicts: libavcodec-dev, libavdevice-dev, libavfilter-dev, libavformat-dev, libavutil-dev, libswresample-dev, libswscale-dev
+Depends: @DEPENDS@
 Homepage: https://github.com/nyanmisaka/ffmpeg-rockchip
-Description: FFmpeg 6.1 with Rockchip hardware acceleration (rkmpp/rkrga)
- FFmpeg libraries with Rockchip RKMPP hardware codecs and RKRGA scaling,
- cross-compiled from nyanmisaka/ffmpeg-rockchip. Installs into the Debian
- multiarch paths and replaces the stock Debian FFmpeg dev packages in the
- sysroot.
+Description: @DESCRIPTION@

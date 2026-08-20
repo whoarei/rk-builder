@@ -35,7 +35,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >-
           gh release create "$GITHUB_REF_NAME"
-          dist/rockchip-mpp-dev_*.deb dist/rockchip-mpp-dev_*.sha256
+          dist/rockchip-mpp*.deb dist/rockchip-mpp*.sha256
           --verify-tag
           --generate-notes
           --title "rockchip-mpp 1.1.0 ARM64 Debian package"

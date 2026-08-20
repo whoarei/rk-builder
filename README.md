@@ -25,7 +25,8 @@ commit 发布的官方 ARM64 库，不是本地重编 librga。
 
 Debian 11 官方仓库仅提供 FFmpeg 4.3，且没有 Rockchip 的
 `AV_HWDEVICE_TYPE_RKMPP`。镜像会保留 Debian ARM64 包构成的基础 sysroot，再将
-上述 FFmpeg 6.1、MPP 和 RGA 安装到 `/opt/sysroot/usr`，供工程优先使用。
+上述 FFmpeg 6.1、MPP 和 RGA 安装到 `/opt/sysroot/usr/local/ans`，
+供工程优先使用。
 
 ## 编译工程
 
@@ -65,9 +66,21 @@ Debian 11 官方仓库仅提供 FFmpeg 4.3，且没有 Rockchip 的
 
 ## 单独生成 deb 包
 
-librga / rockchip-mpp / ffmpeg-rockchip 三个组件都会打成 ARM64 deb
-发布到 GitHub Release，镜像构建时优先复用这些预编译 deb，只有缺失或
-版本不匹配时才从源码编译。
+librga / rockchip-mpp / ffmpeg-rockchip 每个组件都会产出两个 ARM64 deb：
+安装在目标设备上的运行包（含共享库，ffmpeg 还含 `ffmpeg`/`ffprobe` 等
+二进制），以及只在交叉编译 sysroot 里使用的 `-dev` 开发包（头文件、
+链接器符号链接、pkg-config）。所有包统一安装到 `/usr/local/ans`，
+`/usr/local` 在动态链接器搜索顺序中优先于 `/usr`，因此目标设备上
+安装的库会覆盖 Debian 自带的同名库。
+
+运行包 / 开发包对应关系：
+
+- `librga` / `librga-dev`
+- `rockchip-mpp` / `rockchip-mpp-dev`
+- `ffmpeg-rockchip` / `ffmpeg-rockchip-dev`
+
+deb 会发布到 GitHub Release，镜像构建时优先复用这些预编译 deb，
+只有缺失或版本不匹配时才从源码编译。
 
 本地导出全部 deb（通过 Docker 多阶段构建）：
 
@@ -87,9 +100,9 @@ docker build --target ffmpeg-debs --output type=local,dest=dist .
 
 输出到 `dist/` 目录，例如：
 
-- `librga-dev_1.10.6_arm64.deb`
-- `rockchip-mpp-dev_1.1.0_arm64.deb`
-- `ffmpeg-rockchip-dev_6.1_arm64.deb`
+- `librga_1.10.6_arm64.deb`、`librga-dev_1.10.6_arm64.deb`
+- `rockchip-mpp_1.1.0_arm64.deb`、`rockchip-mpp-dev_1.1.0_arm64.deb`
+- `ffmpeg-rockchip_6.1_arm64.deb`、`ffmpeg-rockchip-dev_6.1_arm64.deb`
 
 推送对应 tag 会触发 GitHub Actions 构建 deb 并发布 Release：
 

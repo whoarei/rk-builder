@@ -1,6 +1,6 @@
-prefix=/usr
+prefix=/usr/local/ans
 exec_prefix=${prefix}
-libdir=${exec_prefix}/lib/aarch64-linux-gnu
+libdir=${exec_prefix}/lib
 includedir=${prefix}/include
 
 Name: librga

@@ -3,7 +3,7 @@
 # 用法: 在打包脚本开头 source 本文件,然后按顺序调用:
 #   deb_common_init                          初始化 WORK_DIR/trap/路径变量
 #   deb_fetch_source <repo> <commit> <dest>  浅克隆源码并校验 commit
-#   deb_render_control <tpl> <root> <ver>    从 control.in 生成 DEBIAN/control
+#   deb_render_control <tpl> <root> <ver> [kv...]  从 control.in 生成 DEBIAN/control
 #   deb_finish_package <root> <out> <name> <ver>  打 deb + sha256
 #
 # 各脚本只需保留自己特有的部分:如何编译/收集产物、如何生成 pkg-config。
@@ -26,7 +26,13 @@ fi
 # 调用前脚本需先 set -euo pipefail。
 deb_common_init()
 {
-    SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[1]}")" && pwd)
+    local i
+    for i in "${!BASH_SOURCE[@]}"; do
+        if [[ ${BASH_SOURCE[$i]} != "${BASH_SOURCE[0]}" ]]; then
+            SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[$i]}")" && pwd)
+            break
+        fi
+    done
     BUILDER_DIR=${BUILDER_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}
     OUT_DIR=${OUT_DIR:-"$BUILDER_DIR/dist"}
 
@@ -66,23 +72,33 @@ deb_fetch_source()
     export SOURCE_DATE_EPOCH
 }
 
-# deb_render_control <template> <package_root> <version>
+# deb_render_control <template> <package_root> <version> [KEY=VALUE ...]
 #
-# 从 control.in 模板生成 DEBIAN/control,把 @VERSION@ 替换为实际版本号。
-# 模板里其他字段(Package/Architecture/Depends 等)保持原样。
+# 从 control.in 模板生成 DEBIAN/control:
+#   - @VERSION@ 始终替换为 <version>
+#   - 额外的 KEY=VALUE 参数把模板里的 @KEY@ 替换为 VALUE,
+#     用于一个模板产出多个 control(如运行包/dev包 共用模板)。
 #
 # 参数:
 #   template      control.in 模板路径
 #   package_root  deb 包根目录(函数内创建 DEBIAN/ 子目录)
 #   version       版本号字符串
+#   KEY=VALUE     额外的占位符替换对,可多个
 deb_render_control()
 {
     local template=$1
     local package_root=$2
     local version=$3
+    shift 3
+
+    local sed_args=(-e "s/@VERSION@/$version/g")
+    local kv
+    for kv in "$@"; do
+        sed_args+=(-e "s|@${kv%%=*}@|${kv#*=}|g")
+    done
 
     mkdir -p "$package_root/DEBIAN"
-    sed "s/@VERSION@/$version/g" "$template" > "$package_root/DEBIAN/control"
+    sed "${sed_args[@]}" "$template" > "$package_root/DEBIAN/control"
 }
 
 # deb_finish_package <package_root> <out_dir> <name> <version>
@@ -105,6 +121,10 @@ deb_finish_package()
     local version=$4
 
     local package_file="$out_dir/${name}_${version}_arm64.deb"
+
+    # 脚本可能跳过 deb_fetch_source(如 BUILD_INPUT 复用已有产物),
+    # 此时用当前时间兜底,保证 deb_finish_package 可用。
+    SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(date +%s)}
 
     find "$package_root" -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 

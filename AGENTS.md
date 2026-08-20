@@ -3,7 +3,10 @@
 ## Project Structure & Module Organization
 
 `rk-builder` is a Docker-based x86_64 → ARM64 cross-compile environment for
-Rockchip Debian 11 devices (default target: RK3588).
+Rockchip Debian 11 devices (default target: RK3588). Each component ships
+two debs — a runtime package (e.g. `rockchip-mpp`) for target devices and a
+`-dev` package for the cross sysroot — all installed under the
+/usr/local/ans prefix.
 
 - `Dockerfile`: multi-stage build — librga deb packaging, arm64 sysroot
   assembly, Rockchip MPP and ffmpeg-rockchip cross-compiles, final image.
@@ -39,7 +42,8 @@ Rockchip Debian 11 devices (default target: RK3588).
   — use the prebuilt GHCR image.
 - `./scripts/build-librga-deb.sh` / `build-mpp-deb.sh` /
   `build-ffmpeg-rockchip-deb.sh` — produce the ARM64 debs under `dist/`
-  plus their SHA-256 files.
+  plus their SHA-256 files. Each script emits two packages: a runtime deb
+  and a `-dev` deb, both targeting the /usr/local/ans prefix.
 - `docker build -t rk-builder:debian11-arm64 .` — build the image directly.
 
 Cross-compiled binaries cannot run on the x86_64 host; verify them on a target
