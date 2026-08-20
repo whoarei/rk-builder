@@ -3,157 +3,33 @@
 set -euo pipefail
 
 BUILDER_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-REMOTE_IMAGE=${RK_BUILDER_IMAGE:-ghcr.io/whoarei/rk-builder:latest}
-LOCAL_IMAGE=rk-builder:debian11-arm64
-PROJECT_DIR=$PWD
-BUILD_TYPE=Release
-IMAGE_MODE=auto
-CMAKE_ARGS=()
-
-usage()
-{
-    cat <<'EOF'
-Usage: build.sh [OPTIONS] [PROJECT_DIR] [-- CMAKE_ARGS...]
-
-Arguments:
-  PROJECT_DIR          CMake source tree to build (default: current directory)
-
-Options:
-  -d, --debug          Debug build (default: Release)
-  --release            Release build
-  --rebuild-image      Build the local image and use it
-  --pull-image         Pull RK_BUILDER_IMAGE and use it
-  -h, --help           Show this help
-
-Environment:
-  RK_BUILDER_IMAGE     Remote image name (default: ghcr.io/whoarei/rk-builder:latest)
-  JOBS                 Parallel build jobs
-
-Build artifacts go to PROJECT_DIR/build/<release|debug>/.
-EOF
-}
+MODE=remote
+ARGS=()
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        -d|--debug)
-            BUILD_TYPE=Debug
-            shift
-            ;;
-        --release)
-            BUILD_TYPE=Release
-            shift
-            ;;
         --rebuild-image)
-            IMAGE_MODE=build
+            MODE=local
             shift
             ;;
         --pull-image)
-            IMAGE_MODE=pull
             shift
-            ;;
-        -h|--help)
-            usage
-            exit 0
             ;;
         --)
-            shift
-            CMAKE_ARGS+=("$@")
+            ARGS+=("$@")
             break
             ;;
-        -*)
-            echo "Unknown option: $1" >&2
-            usage >&2
-            exit 2
-            ;;
         *)
-            if [[ $PROJECT_DIR != "$PWD" ]]; then
-                echo "Only one PROJECT_DIR argument is supported" >&2
-                usage >&2
-                exit 2
-            fi
-            PROJECT_DIR=$(cd "$1" && pwd)
+            ARGS+=("$1")
             shift
             ;;
     esac
 done
 
-build_local_image()
-{
-    docker build --tag "$LOCAL_IMAGE" "$BUILDER_DIR"
-    IMAGE=$LOCAL_IMAGE
-}
+echo "build.sh is deprecated; use rk-builder.sh or rk-builder-local.sh" >&2
 
-case "$IMAGE_MODE" in
-    build)
-        build_local_image
-        ;;
-    pull)
-        docker pull "$REMOTE_IMAGE"
-        IMAGE=$REMOTE_IMAGE
-        ;;
-    auto)
-        if docker image inspect "$REMOTE_IMAGE" >/dev/null 2>&1; then
-            IMAGE=$REMOTE_IMAGE
-        elif docker image inspect "$LOCAL_IMAGE" >/dev/null 2>&1; then
-            IMAGE=$LOCAL_IMAGE
-        else
-            if docker pull "$REMOTE_IMAGE"; then
-                IMAGE=$REMOTE_IMAGE
-            else
-                echo "Falling back to building the local image" >&2
-                build_local_image
-            fi
-        fi
-        ;;
-esac
-
-# Summarize the build environment and ask for confirmation before starting.
-IMAGE_ID=$(docker image inspect --format '{{.Id}}' "$IMAGE" 2>/dev/null || echo "unknown")
-IMAGE_CREATED=$(docker image inspect --format '{{.Created}}' "$IMAGE" 2>/dev/null || echo "unknown")
-IMAGE_DIGEST=$(docker image inspect --format '{{join .RepoDigests ", "}}' "$IMAGE" 2>/dev/null || true)
-[[ -n $IMAGE_DIGEST ]] || IMAGE_DIGEST="(none, image not pushed or pulled by digest)"
-
-BUILD_TYPE_LOWER=${BUILD_TYPE,,}
-
-cat <<EOF
-=== Build environment ===
-  Image          : $IMAGE
-  Image ID       : $IMAGE_ID
-  Image digest   : $IMAGE_DIGEST
-  Image created  : $IMAGE_CREATED
-  Project dir    : $PROJECT_DIR
-  Build dir      : $PROJECT_DIR/build/$BUILD_TYPE_LOWER
-  Build type     : $BUILD_TYPE
-  Jobs           : ${JOBS:-<auto>}
-  CMake args     : ${CMAKE_ARGS[*]:-<none>}
-===========================
-EOF
-
-if [[ -t 0 ]]; then
-    read -r -p "Proceed with the build? [Y/n] " answer
-    case "$answer" in
-        N|n)
-            echo "Build cancelled."
-            exit 0
-            ;;
-    esac
+if [[ $MODE == local ]]; then
+    exec "$BUILDER_DIR/rk-builder-local.sh" "${ARGS[@]}"
 fi
 
-mkdir -p "$PROJECT_DIR/build/$BUILD_TYPE_LOWER" "$PROJECT_DIR/.ccache"
-
-RUN_ARGS=(
-    --rm
-    --user "$(id -u):$(id -g)"
-    --mount "type=bind,source=$PROJECT_DIR,target=/workspace/project"
-    --mount "type=bind,source=$PROJECT_DIR/build/$BUILD_TYPE_LOWER,target=/workspace/build/$BUILD_TYPE_LOWER"
-    --mount "type=bind,source=$PROJECT_DIR/.ccache,target=/workspace/ccache"
-    --env HOME=/tmp
-    --env "BUILD_TYPE=$BUILD_TYPE"
-)
-
-if [[ -n ${JOBS:-} ]]; then
-    RUN_ARGS+=(--env "JOBS=$JOBS")
-fi
-
-docker run "${RUN_ARGS[@]}" "$IMAGE" "${CMAKE_ARGS[@]}"
+exec "$BUILDER_DIR/rk-builder.sh" "${ARGS[@]}"

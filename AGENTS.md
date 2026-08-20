@@ -10,7 +10,10 @@ two debs — a runtime package (e.g. `rockchip-mpp`) for target devices and a
 
 - `Dockerfile`: multi-stage build — librga deb packaging, arm64 sysroot
   assembly, Rockchip MPP and ffmpeg-rockchip cross-compiles, final image.
-- `build.sh`: main entry point; builds a CMake project inside the container.
+- `rk-builder.sh`: portable entry point using the cached or remote GHCR image.
+- `rk-builder-local.sh`: repository-local entry point that rebuilds the image
+  from the Dockerfile before compiling a CMake project.
+- `build.sh`: deprecated compatibility wrapper for the two entry points.
 - `scripts/`: `entrypoint.sh` (container entrypoint `rk-cross-build`) and
   `lib-deb-common.sh` (shared deb packaging helpers), and the standalone
   ARM64 deb packagers `build-librga-deb.sh`, `build-mpp-deb.sh`,
@@ -28,18 +31,17 @@ two debs — a runtime package (e.g. `rockchip-mpp`) for target devices and a
 
 ## Build, Test, and Development Commands
 
-- `./build.sh` — build the parent CMake project (Release) using the local
-  image, building the image first if missing.
-- `./build.sh -d` — Debug build; output in `build/debug/`.
-- `./build.sh examples/hello` — build the example project; useful for
-  smoke-testing the toolchain.
-- `PROJECT_DIR=/path/to/project ./build.sh --rebuild-image` — force an image
-  rebuild and compile a different CMake tree. The script prints the resolved
-  image and build settings, then asks for confirmation before compiling
-  (auto-skipped when stdin is not a TTY).
-- `./build.sh -- -DFOO=ON` — pass extra CMake arguments.
-- `RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest ./build.sh --pull-image`
-  — use the prebuilt GHCR image.
+- `./rk-builder.sh examples/hello` — build the example project using the
+  cached or remote GHCR image; useful for smoke-testing the toolchain.
+- `./rk-builder.sh -d examples/hello` — Debug build; output in
+  `examples/hello/build/debug/`.
+- `./rk-builder-local.sh examples/hello` — rebuild the local image from the
+  current Dockerfile, then build the example project.
+- `./rk-builder.sh examples/hello -- -DFOO=ON` — pass extra CMake arguments.
+- `./rk-builder.sh --script examples/hello` — print the build environment but
+  skip interactive confirmation for scripts or automation.
+- `RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest ./rk-builder.sh
+  examples/hello` — use the specified prebuilt image.
 - `./scripts/build-librga-deb.sh` / `build-mpp-deb.sh` /
   `build-ffmpeg-rockchip-deb.sh` — produce the ARM64 debs under `dist/`
   plus their SHA-256 files. Each script emits two packages: a runtime deb
@@ -53,7 +55,7 @@ device (see the "部署验证" section of `README.md`).
 
 - Shell scripts: bash with `set -euo pipefail`, 4-space indentation, function
   names in `snake_case`, environment overrides in `UPPER_CASE` (e.g.
-  `PROJECT_DIR`, `RK_BUILDER_IMAGE`).
+  `RK_BUILDER_IMAGE`, `RK_BUILDER_LOCAL_IMAGE`).
 - Dockerfile: multi-line `RUN` chains joined with `&&`; explanatory comments
   go above the block, never between continuation lines (a `#` mid-chain breaks
   the line continuation).
