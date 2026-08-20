@@ -93,11 +93,11 @@ deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" ffmpeg-rockchip "$FFMPEG_VERSION"
 # 开发包 ffmpeg-rockchip-dev:头文件 + pkg-config + 链接器 .so 链接
 # ----------------------------------------------------------------------
 mkdir -p \
-    "$DEV_ROOT$PREFIX" \
+    "$DEV_ROOT$PREFIX/lib/pkgconfig" \
     "$DEV_ROOT/usr/share/doc/ffmpeg-rockchip-dev"
 
 cp -a "$INSTALL_DIR$PREFIX/include" "$DEV_ROOT$PREFIX/"
-cp -a "$INSTALL_DIR$PREFIX/lib/pkgconfig" "$DEV_ROOT$PREFIX/lib/"
+cp -a "$INSTALL_DIR$PREFIX/lib/pkgconfig/." "$DEV_ROOT$PREFIX/lib/pkgconfig/"
 find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type l -name 'lib*.so' \
     -exec cp -a {} "$DEV_ROOT$PREFIX/lib/" \;
 

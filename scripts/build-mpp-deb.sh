@@ -60,10 +60,6 @@ if [[ ! -e $INSTALL_DIR$PREFIX/lib/librockchip_mpp.so ]]; then
     exit 1
 fi
 
-# 头文件所在子目录(rockchip/ 或直接 include/ 下),后面 dev 包拆分时用
-include_dir=include
-[[ -d $INSTALL_DIR$PREFIX/include/rockchip ]] && include_dir=include/rockchip
-
 # ----------------------------------------------------------------------
 # 运行包 rockchip-mpp:共享库实体 + soname 链接(不带开发用 .so 链接)
 # ----------------------------------------------------------------------
@@ -101,11 +97,9 @@ find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type f -name '*.a' \
 find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type l -name 'lib*.so' \
     -exec cp -a {} "$DEV_ROOT$PREFIX/lib/" \;
 
-# MPP 上游不生成 pkg-config 文件,这里补上。
-# 头文件装在 include/rockchip/ 时,Cflags 需带上该子目录,
-# 下游 #include <rk_mpi.h> 才能直接命中。
-sed -e "s/@PC_VERSION@/$MPP_PC_VERSION/g" \
-    -e "s|@INCLUDEDIR@|$include_dir|g" \
+# MPP 上游不生成 pkg-config 文件,这里补上。模板同时加入 include/ 和
+# include/rockchip/,兼容 #include <rockchip/rk_mpi.h> 与 <rk_mpi.h>。
+sed "s/@PC_VERSION@/$MPP_PC_VERSION/g" \
     "$PACKAGING_DIR/rockchip_mpp.pc.in" \
     > "$DEV_ROOT$PREFIX/lib/pkgconfig/rockchip_mpp.pc"
 

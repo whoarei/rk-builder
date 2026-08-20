@@ -1,10 +1,10 @@
 prefix=/usr/local/ans
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
-includedir=${prefix}/@INCLUDEDIR@
+includedir=${prefix}/include
 
 Name: rockchip_mpp
 Description: Rockchip MPP hardware media codec library
 Version: @PC_VERSION@
 Libs: -L${libdir} -lrockchip_mpp
-Cflags: -I${includedir}
+Cflags: -I${includedir} -I${includedir}/rockchip
