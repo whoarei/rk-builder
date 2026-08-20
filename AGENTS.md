@@ -9,26 +9,37 @@ Rockchip Debian 11 devices (default target: RK3588).
   assembly, Rockchip MPP and ffmpeg-rockchip cross-compiles, final image.
 - `build.sh`: main entry point; builds a CMake project inside the container.
 - `scripts/`: `entrypoint.sh` (container entrypoint `rk-cross-build`) and
-  `build-librga-deb.sh` (standalone librga ARM64 deb packaging).
+  `lib-deb-common.sh` (shared deb packaging helpers), and the standalone
+  ARM64 deb packagers `build-librga-deb.sh`, `build-mpp-deb.sh`,
+  `build-ffmpeg-rockchip-deb.sh`.
 - `cmake/aarch64-linux-gnu.cmake`: CMake toolchain file (compiler, sysroot,
   find rules).
 - `librga/`: deb packaging templates (`control.in`, `librga.pc.in`).
-- `.github/workflows/`: `image.yml` (image CI), `librga-release.yml` (deb
-  release on `librga-v*` tags).
+- `.github/workflows/`: `image.yml` (image CI) and deb release workflows
+  `librga-release.yml`, `mpp-release.yml`, `ffmpeg-rockchip-release.yml`
+  on `librga-v*`, `mpp-v*`, `ffmpeg-rockchip-v*` tags respectively.
+- `mpp/`: deb packaging templates (`control.in`, `rockchip_mpp.pc.in`)
+- `ffmpeg-rockchip/`: deb packaging templates (`control.in`)
 - `build/`, `.ccache/`, `dist/`: generated artifacts; never commit these.
+- `examples/`: example projects
 
 ## Build, Test, and Development Commands
 
 - `./build.sh` — build the parent CMake project (Release) using the local
   image, building the image first if missing.
 - `./build.sh -d` — Debug build; output in `build/debug/`.
+- `./build.sh examples/hello` — build the example project; useful for
+  smoke-testing the toolchain.
 - `PROJECT_DIR=/path/to/project ./build.sh --rebuild-image` — force an image
-  rebuild and compile a different CMake tree.
+  rebuild and compile a different CMake tree. The script prints the resolved
+  image and build settings, then asks for confirmation before compiling
+  (auto-skipped when stdin is not a TTY).
 - `./build.sh -- -DFOO=ON` — pass extra CMake arguments.
 - `RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest ./build.sh --pull-image`
   — use the prebuilt GHCR image.
-- `./scripts/build-librga-deb.sh` — produce `dist/librga-dev_1.10.6_arm64.deb`
-  plus its SHA-256 file.
+- `./scripts/build-librga-deb.sh` / `build-mpp-deb.sh` /
+  `build-ffmpeg-rockchip-deb.sh` — produce the ARM64 debs under `dist/`
+  plus their SHA-256 files.
 - `docker build -t rk-builder:debian11-arm64 .` — build the image directly.
 
 Cross-compiled binaries cannot run on the x86_64 host; verify them on a target
