@@ -14,8 +14,9 @@
 #   3. base-sysroot    下载 arm64 Debian 依赖并组装基础 sysroot
 #   4. arm64-sysroot   base-sysroot + librga/mpp deb
 #   5. ffmpeg-deb      基于 arm64-sysroot 交叉编译 ffmpeg-rockchip 并打包 deb
-#   6. full-sysroot    arm64-sysroot + ffmpeg deb(最终镜像用的完整 sysroot)
-#   7. 最终镜像        交叉工具链 + full-sysroot + 入口脚本
+#   6. gst-deb         基于 arm64-sysroot 交叉编译 gstreamer-rockchip 插件并打包 deb
+#   7. full-sysroot    arm64-sysroot + ffmpeg deb(最终镜像用的完整 sysroot)
+#   8. 最终镜像        交叉工具链 + full-sysroot + 入口脚本
 #
 # 构建开关:
 #   USE_LOCAL_DEBS=ON (默认)  若 dist/ 或 GitHub Release 已有对应版本的
@@ -308,6 +309,53 @@ RUN BUILD_INPUT=/tmp/install \
     build-ffmpeg-rockchip-deb
 
 # -----------------------------------------------------------------------------
+# 阶段 3b: 交叉编译 gstreamer-rockchip 插件并打包 deb
+# JeffyCN 维护的 GStreamer Rockchip 插件(meson 工程),含 rockchipmpp
+# (MPP 硬件编解码)与 kmssrc(KMS 采集)插件。依赖 arm64-sysroot 里的
+# GStreamer dev 库和 librga/mpp deb。rkximage(X11 输出)在上游固定
+# commit 存在编译错误,构建脚本里显式禁用。
+# -----------------------------------------------------------------------------
+
+FROM arm64-sysroot AS gst-deb
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG GST_ROCKCHIP_REPOSITORY=https://github.com/JeffyCN/mirrors.git
+ARG GST_ROCKCHIP_COMMIT=dcbcd6454ef892e385b3a782600369eb6c0719db
+ARG GST_ROCKCHIP_VERSION=1.14.4
+
+# arm64-sysroot 阶段已包含 GStreamer dev 库和 librga/mpp deb,
+# 这里只需交叉工具链与 meson/ninja。python3-setuptools 是上游
+# meson.build 里 python3 find_program 校验所必需的。
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        crossbuild-essential-arm64 \
+        dpkg-dev \
+        git \
+        meson \
+        ninja-build \
+        pkg-config \
+        python3-setuptools \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PKG_CONFIG_DIR="" \
+    PKG_CONFIG_PATH="" \
+    PKG_CONFIG_LIBDIR=/opt/sysroot/usr/local/ans/lib/pkgconfig:/opt/sysroot/usr/lib/aarch64-linux-gnu/pkgconfig:/opt/sysroot/usr/lib/pkgconfig:/opt/sysroot/usr/share/pkgconfig \
+    PKG_CONFIG_SYSROOT_DIR=/opt/sysroot
+
+COPY gstreamer-rockchip/ /opt/rk-builder/gstreamer-rockchip/
+COPY scripts/build-gstreamer-rockchip-deb.sh /usr/local/bin/build-gstreamer-rockchip-deb
+COPY scripts/lib-deb-common.sh /usr/local/bin/lib-deb-common.sh
+
+# 拉源码 → meson 交叉编译 → 打 deb,产物输出到 /out/*.deb
+RUN GST_ROCKCHIP_VERSION="$GST_ROCKCHIP_VERSION" \
+    GST_ROCKCHIP_COMMIT="$GST_ROCKCHIP_COMMIT" \
+    GST_ROCKCHIP_REPOSITORY="$GST_ROCKCHIP_REPOSITORY" \
+    PACKAGING_DIR=/opt/rk-builder/gstreamer-rockchip \
+    OUT_DIR=/out \
+    build-gstreamer-rockchip-deb
+
+# -----------------------------------------------------------------------------
 # 阶段 4: 组装 arm64 sysroot
 # sysroot 是交叉编译的目标环境根目录,包含 arm64 的头文件和库,
 # 交叉链接器只在这里面找依赖,保证不会误用宿主机的 amd64 库。
@@ -334,9 +382,10 @@ FROM scratch AS debs
 COPY --from=librga-deb /out/ /out/
 COPY --from=mpp-deb /out/ /out/
 COPY --from=ffmpeg-deb /out/ /out/
+COPY --from=gst-deb /out/ /out/
 
 # 单独导出每个 deb 的 scratch 阶段,供各 release workflow 用
-# --target librga-debs / mpp-debs / ffmpeg-debs 导出。
+# --target librga-debs / mpp-debs / ffmpeg-debs / gst-rockchip-debs 导出。
 # 这些阶段只包含 /out 目录,--output type=local 导出干净。
 FROM scratch AS librga-debs
 COPY --from=librga-deb /out/ /
@@ -346,6 +395,9 @@ COPY --from=mpp-deb /out/ /
 
 FROM scratch AS ffmpeg-debs
 COPY --from=ffmpeg-deb /out/ /
+
+FROM scratch AS gst-rockchip-debs
+COPY --from=gst-deb /out/ /
 
 # -----------------------------------------------------------------------------
 # 阶段 5: 最终镜像

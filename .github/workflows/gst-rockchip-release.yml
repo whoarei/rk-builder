@@ -1,0 +1,46 @@
+name: Build gst-rockchip deb
+
+on:
+  push:
+    tags: ["gst-rockchip-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Export gst-rockchip deb
+        run: |
+          docker build --target gst-rockchip-debs --output type=local,dest="$PWD/dist" .
+          ls -la dist/
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gst-rockchip-arm64
+          path: |
+            dist/*.deb
+            dist/*.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/gst-rockchip*.deb dist/gst-rockchip*.sha256 --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/gst-rockchip*.deb dist/gst-rockchip*.sha256 \
+              --verify-tag \
+              --generate-notes \
+              --title "gst-rockchip 1.14.4 ARM64 Debian package"
+          fi

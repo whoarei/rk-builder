@@ -15,7 +15,12 @@
   版本 1.3.10）。
 - FFmpeg：从 `nyanmisaka/ffmpeg-rockchip` 的 6.1 分支交叉编译，固定 commit
   `d547c18f18c744bc5e2180ce028fe1a6bd23ddad`，启用 `libdrm`、RKMPP 和 RKRGA。
-- deb 打包：librga / rockchip-mpp / ffmpeg-rockchip 共用
+- GStreamer 插件：从 `JeffyCN/mirrors` 的 `gstreamer-rockchip` 分支交叉编译
+  （meson 工程），固定 commit
+  `dcbcd6454ef892e385b3a782600369eb6c0719db`。产出 `rockchipmpp`
+  （MPP 硬件编解码）与 `kmssrc`（KMS 采集）插件；`rkximage`（X11 输出）
+  在该 commit 有上游编译错误，构建时显式禁用。
+- deb 打包：librga / rockchip-mpp / ffmpeg-rockchip / gst-rockchip 共用
   `scripts/lib-deb-common.sh` 提供的初始化、源码拉取校验、control 渲染和
   打包函数，各组件脚本只保留编译与产物收集逻辑。
 
@@ -107,6 +112,11 @@ librga / rockchip-mpp / ffmpeg-rockchip 每个组件都会产出两个 ARM64 deb
 - `librga` / `librga-dev`
 - `rockchip-mpp` / `rockchip-mpp-dev`
 - `ffmpeg-rockchip` / `ffmpeg-rockchip-dev`
+- `gst-rockchip`（只有运行包：GStreamer 插件没有头文件和 pkg-config，
+  不产出 `-dev` 包。插件安装在 `/usr/local/ans/lib/gstreamer-1.0`，
+  系统 GStreamer 不会自动扫描该目录，运行包通过
+  `/etc/profile.d/gst-rockchip1.0.sh` 为登录 shell 导出
+  `GST_PLUGIN_PATH_1_0`；服务进程需自行设置该环境变量。）
 
 deb 会发布到 GitHub Release，镜像构建时优先复用这些预编译 deb，
 只有缺失或版本不匹配时才从源码编译。
@@ -124,6 +134,7 @@ docker build --target debs --output type=local,dest=dist .
 docker build --target librga-debs --output type=local,dest=dist .
 docker build --target mpp-debs --output type=local,dest=dist .
 docker build --target ffmpeg-debs --output type=local,dest=dist .
+docker build --target gst-rockchip-debs --output type=local,dest=dist .
 # 单独导出时 deb 直接在 dist/ 下
 ```
 
@@ -132,12 +143,14 @@ docker build --target ffmpeg-debs --output type=local,dest=dist .
 - `librga_1.10.6_arm64.deb`、`librga-dev_1.10.6_arm64.deb`
 - `rockchip-mpp_1.1.0_arm64.deb`、`rockchip-mpp-dev_1.1.0_arm64.deb`
 - `ffmpeg-rockchip_6.1.0-1_arm64.deb`、`ffmpeg-rockchip-dev_6.1.0-1_arm64.deb`
+- `gst-rockchip_1.14.4_arm64.deb`
 
 推送对应 tag 会触发 GitHub Actions 构建 deb 并发布 Release：
 
 - `librga-v1.10.6` → librga deb
 - `mpp-v1.1.0` → rockchip-mpp deb
 - `ffmpeg-rockchip-v6.1.0-1` → ffmpeg-rockchip deb
+- `gst-rockchip-v1.14.4` → gst-rockchip deb
 
 镜像构建默认开启 `USE_LOCAL_DEBS=ON`：优先用本地 `dist/` 里的 deb，其次
 GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强制
@@ -147,7 +160,8 @@ GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强
 
 - `image.yml`：验证 Dockerfile；对 main/tag 构建并推送
   `ghcr.io/<owner>/rk-builder`。
-- `librga-release.yml` / `mpp-release.yml` / `ffmpeg-rockchip-release.yml`：
-  分别生成对应组件的 ARM64 deb 工件；对 `librga-v*` / `mpp-v*` /
-  `ffmpeg-rockchip-v*` tag 创建 GitHub Release。三个工作流结构一致，
-  只是构建目标（`librga-debs` / `mpp-debs` / `ffmpeg-debs`）不同。
+- `librga-release.yml` / `mpp-release.yml` / `ffmpeg-rockchip-release.yml` /
+  `gst-rockchip-release.yml`：分别生成对应组件的 ARM64 deb 工件；对
+  `librga-v*` / `mpp-v*` / `ffmpeg-rockchip-v*` / `gst-rockchip-v*` tag
+  创建 GitHub Release。四个工作流结构一致，只是构建目标
+  （`librga-debs` / `mpp-debs` / `ffmpeg-debs` / `gst-rockchip-debs`）不同。

@@ -3,13 +3,15 @@
 ## Project Structure & Module Organization
 
 `rk-builder` is a Docker-based x86_64 → ARM64 cross-compile environment for
-Rockchip Debian 11 devices (default target: RK3588). Each component ships
-two debs — a runtime package (e.g. `rockchip-mpp`) for target devices and a
-`-dev` package for the cross sysroot — all installed under the
-/usr/local/ans prefix.
+Rockchip Debian 11 devices (default target: RK3588). Each library component
+ships two debs — a runtime package (e.g. `rockchip-mpp`) for target devices
+and a `-dev` package for the cross sysroot — all installed under the
+/usr/local/ans prefix. The `gst-rockchip` GStreamer plugin package is
+runtime-only (GStreamer plugins install no headers/pkg-config).
 
 - `Dockerfile`: multi-stage build — librga deb packaging, arm64 sysroot
-  assembly, Rockchip MPP and ffmpeg-rockchip cross-compiles, final image.
+  assembly, Rockchip MPP, ffmpeg-rockchip, and gstreamer-rockchip plugin
+  cross-compiles, final image.
 - `rk-builder.sh`: portable entry point using the cached or remote GHCR image.
 - `rk-builder-local.sh`: repository-local entry point that rebuilds the image
   from the Dockerfile before compiling a CMake project.
@@ -17,15 +19,18 @@ two debs — a runtime package (e.g. `rockchip-mpp`) for target devices and a
 - `scripts/`: `entrypoint.sh` (container entrypoint `rk-cross-build`) and
   `lib-deb-common.sh` (shared deb packaging helpers), and the standalone
   ARM64 deb packagers `build-librga-deb.sh`, `build-mpp-deb.sh`,
-  `build-ffmpeg-rockchip-deb.sh`.
+  `build-ffmpeg-rockchip-deb.sh`, `build-gstreamer-rockchip-deb.sh`.
 - `cmake/aarch64-linux-gnu.cmake`: CMake toolchain file (compiler, sysroot,
   find rules).
 - `librga/`: deb packaging templates (`control.in`, `librga.pc.in`).
 - `.github/workflows/`: `image.yml` (image CI) and deb release workflows
-  `librga-release.yml`, `mpp-release.yml`, `ffmpeg-rockchip-release.yml`
-  on `librga-v*`, `mpp-v*`, `ffmpeg-rockchip-v*` tags respectively.
+  `librga-release.yml`, `mpp-release.yml`, `ffmpeg-rockchip-release.yml`,
+  `gst-rockchip-release.yml` on `librga-v*`, `mpp-v*`,
+  `ffmpeg-rockchip-v*`, `gst-rockchip-v*` tags respectively.
 - `mpp/`: deb packaging templates (`control.in`, `rockchip_mpp.pc.in`)
 - `ffmpeg-rockchip/`: deb packaging templates (`control.in`)
+- `gstreamer-rockchip/`: deb packaging templates (`control.in`) for the
+  JeffyCN gstreamer-rockchip plugin package
 - `build/`, `.ccache/`, `dist/`: generated artifacts; never commit these.
 - `examples/`: example projects
 
@@ -43,9 +48,11 @@ two debs — a runtime package (e.g. `rockchip-mpp`) for target devices and a
 - `RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest ./rk-builder.sh
   examples/hello` — use the specified prebuilt image.
 - `./scripts/build-librga-deb.sh` / `build-mpp-deb.sh` /
-  `build-ffmpeg-rockchip-deb.sh` — produce the ARM64 debs under `dist/`
-  plus their SHA-256 files. Each script emits two packages: a runtime deb
-  and a `-dev` deb, both targeting the /usr/local/ans prefix.
+  `build-ffmpeg-rockchip-deb.sh` / `build-gstreamer-rockchip-deb.sh` —
+  produce the ARM64 debs under `dist/` plus their SHA-256 files. Each script
+  emits two packages (runtime deb + `-dev` deb) except
+  `build-gstreamer-rockchip-deb.sh`, which emits the runtime-only
+  `gst-rockchip` deb; all target the /usr/local/ans prefix.
 - `docker build -t rk-builder:debian11-arm64 .` — build the image directly.
 
 Cross-compiled binaries cannot run on the x86_64 host; verify them on a target
