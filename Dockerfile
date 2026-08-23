@@ -4,23 +4,24 @@
 # rk-builder：Rockchip ARM64 交叉编译环境
 #
 # 在 x86_64(amd64) 构建机上,交叉编译出面向 Rockchip ARM64 平台的
-# librga / rockchip-mpp / ffmpeg-rockchip,并组装一个可复用的
+# librga / rockchip-mpp / RKNN runtime / ffmpeg-rockchip,并组装一个可复用的
 # aarch64 sysroot + 交叉工具链镜像,用于编译依赖 RK 硬件编解码的上层项目
 # (如 OBS、GStreamer 插件等)。
 #
 # 多阶段构建概览:
 #   1. librga-deb      打包 librga deb(官方预编译库)
 #   2. mpp-deb         交叉编译 Rockchip MPP 并打包 deb
-#   3. base-sysroot    下载 arm64 Debian 依赖并组装基础 sysroot
-#   4. arm64-sysroot   base-sysroot + librga/mpp deb
-#   5. ffmpeg-deb      基于 arm64-sysroot 交叉编译 ffmpeg-rockchip 并打包 deb
-#   6. gst-deb         基于 arm64-sysroot 交叉编译 gstreamer-rockchip 插件并打包 deb
-#   7. full-sysroot    arm64-sysroot + ffmpeg deb(最终镜像用的完整 sysroot)
-#   8. 最终镜像        交叉工具链 + full-sysroot + 入口脚本
+#   3. rknn-runtime-deb 打包 RKNN runtime(官方预编译库与 API 头文件)
+#   4. base-sysroot    下载 arm64 Debian 依赖并组装基础 sysroot
+#   5. arm64-sysroot   base-sysroot + librga/mpp/RKNN runtime deb
+#   6. ffmpeg-deb      基于 arm64-sysroot 交叉编译 ffmpeg-rockchip 并打包 deb
+#   7. gst-deb         基于 arm64-sysroot 交叉编译 gstreamer-rockchip 插件并打包 deb
+#   8. full-sysroot    arm64-sysroot + ffmpeg deb(最终镜像用的完整 sysroot)
+#   9. 最终镜像        交叉工具链 + full-sysroot + 入口脚本
 #
 # 构建开关:
 #   USE_LOCAL_DEBS=ON (默认)  若 dist/ 或 GitHub Release 已有对应版本的
-#   librga/mpp/ffmpeg deb,则直接解包进 sysroot,跳过阶段 1-3 的源码编译;
+#   librga/mpp/RKNN/ffmpeg deb,则直接解包进 sysroot,跳过对应源码打包;
 #   否则自动从源码编译。USE_LOCAL_DEBS=OFF 强制总是从源码编译。
 #
 # 打包约定:每个库产出运行包(如 rockchip-mpp)和开发包(*-dev)两个 deb,
@@ -85,9 +86,9 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# MPP 只需要基础 sysroot(编译时只需头文件/基础 libc),复用阶段 4 的精简
+# MPP 只需要基础 sysroot(编译时只需头文件/基础 libc),复用完整
 # sysroot 会循环依赖,所以这里只给编译器一个最小环境。
-# 实际 sysroot 由阶段 4 组装后,再让 ffmpeg 阶段使用。
+# 实际 sysroot 由阶段 5 组装后,再让 ffmpeg 阶段使用。
 # 这里我们先编译到一个不含 Debian arm64 库的“空 sysroot”,
 # 因为 MPP 只依赖 libc/libstdc++/libdrm(后两者可选)。
 # 为保持简单与可复现,直接挂载一个仅含编译器与 Debian 头文件的最小根。
@@ -96,7 +97,7 @@ COPY mpp/ /opt/rk-builder/mpp/
 COPY scripts/build-mpp-deb.sh /usr/local/bin/build-mpp-deb
 COPY scripts/lib-deb-common.sh /usr/local/bin/lib-deb-common.sh
 
-# MPP 只依赖 libc/libstdc++,不依赖阶段 4 的 sysroot。
+# MPP 只依赖 libc/libstdc++,不依赖阶段 5 的 sysroot。
 # 产物输出到 /out/*.deb
 RUN MPP_VERSION="$MPP_VERSION" \
     MPP_PC_VERSION="$MPP_PC_VERSION" \
@@ -107,10 +108,39 @@ RUN MPP_VERSION="$MPP_VERSION" \
     build-mpp-deb
 
 # -----------------------------------------------------------------------------
-# 阶段 3: 交叉编译 ffmpeg-rockchip 并打包 deb
-# nyanmisaka 维护的 FFmpeg fork,集成了 Rockchip 硬件编解码(rkmpp)
-# 与 RGA 图像加速(rkrga)。依赖 librga/mpp 和 libdrm,
-# 需要一个有完整运行库的 sysroot 才能通过 configure 的试编译检查。
+# 阶段 3: 打包 Rockchip RKNN runtime 的 .deb 包
+# rknn_model_zoo 发布 RKNPU2 的官方预编译 librknnrt.so 与 C API 头文件。
+# 这里只封装 Linux AArch64 版本，不执行任何 ARM64 二进制。
+# -----------------------------------------------------------------------------
+
+FROM debian:${DEBIAN_RELEASE} AS rknn-runtime-deb
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG RKNN_RUNTIME_REPOSITORY=https://github.com/airockchip/rknn_model_zoo.git
+ARG RKNN_RUNTIME_COMMIT=bad6c7334531becaf90a561988519b7bec34d0ab
+ARG RKNN_RUNTIME_VERSION=2.3.2
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        dpkg-dev \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY rknn-runtime/ /opt/rk-builder/rknn-runtime/
+COPY scripts/build-rknn-runtime-deb.sh /usr/local/bin/build-rknn-runtime-deb
+COPY scripts/lib-deb-common.sh /usr/local/bin/lib-deb-common.sh
+
+RUN RKNN_RUNTIME_VERSION="$RKNN_RUNTIME_VERSION" \
+    RKNN_RUNTIME_COMMIT="$RKNN_RUNTIME_COMMIT" \
+    RKNN_RUNTIME_REPOSITORY="$RKNN_RUNTIME_REPOSITORY" \
+    PACKAGING_DIR=/opt/rk-builder/rknn-runtime \
+    OUT_DIR=/out \
+    build-rknn-runtime-deb
+
+# -----------------------------------------------------------------------------
+# 阶段 4: 组装基础 ARM64 sysroot
+# 下载并解包 Debian ARM64 开发依赖，后续再叠加 Rockchip 组件 deb。
 # -----------------------------------------------------------------------------
 
 FROM debian:${DEBIAN_RELEASE} AS base-sysroot
@@ -173,7 +203,7 @@ RUN find /opt/sysroot -type l -lname '/*' -exec sh -c '\
     ' sh {} +
 
 # -----------------------------------------------------------------------------
-# 阶段 4b: 在 base-sysroot 之上安装 librga/mpp deb。
+# 阶段 5: 在 base-sysroot 之上安装 librga/mpp/RKNN runtime deb。
 # ffmpeg-deb 阶段基于本阶段(需要完整 sysroot 做 configure 试编译),
 # ffmpeg deb 的安装放到 full-sysroot 阶段,避免循环依赖。
 # -----------------------------------------------------------------------------
@@ -183,16 +213,18 @@ FROM base-sysroot AS arm64-sysroot
 ARG USE_LOCAL_DEBS=ON
 ARG LIBRGA_VERSION=1.10.6
 ARG MPP_VERSION=1.1.0
+ARG RKNN_RUNTIME_VERSION=2.3.2
 ARG FFMPEG_VERSION=6.1.0-1
 ARG DEBS_BASE_URL=https://github.com/whoarei/rk-builder/releases/download
 
-# 安装 librga/mpp/ffmpeg deb。优先使用本地 dist/ 目录,其次 GitHub Release,
+# 安装 librga/mpp/RKNN runtime deb。优先使用本地 dist/ 目录,其次 GitHub Release,
 # 都没有时从源码编译。
 # dist/ 必须在 build context 里(.dockerignore 不排除它)。
 # 如果 dist/ 不存在,COPY 会失败,所以确保仓库里 dist/ 目录存在(哪怕是空的)。
 COPY dist/ /tmp/dist-local/
 COPY --from=librga-deb /out/ /tmp/dist-build/librga/
 COPY --from=mpp-deb /out/ /tmp/dist-build/mpp/
+COPY --from=rknn-runtime-deb /out/ /tmp/dist-build/rknn-runtime/
 
 RUN set -e; \
     fetch_deb() { \
@@ -215,6 +247,7 @@ RUN set -e; \
             case "$name" in \
                 librga*) build_dir=/tmp/dist-build/librga ;; \
                 rockchip-mpp*) build_dir=/tmp/dist-build/mpp ;; \
+                rknn-runtime*) build_dir=/tmp/dist-build/rknn-runtime ;; \
             esac; \
             echo "Using source-built $file"; \
             cp "$build_dir/$file" "$outdir/"; \
@@ -223,15 +256,17 @@ RUN set -e; \
     mkdir -p /tmp/debs; \
     fetch_deb librga-dev "$LIBRGA_VERSION" "librga-v$LIBRGA_VERSION" /tmp/debs; \
     fetch_deb rockchip-mpp-dev "$MPP_VERSION" "mpp-v$MPP_VERSION" /tmp/debs; \
+    fetch_deb rknn-runtime-dev "$RKNN_RUNTIME_VERSION" "rknn-runtime-v$RKNN_RUNTIME_VERSION" /tmp/debs; \
     fetch_deb librga "$LIBRGA_VERSION" "librga-v$LIBRGA_VERSION" /tmp/debs; \
     fetch_deb rockchip-mpp "$MPP_VERSION" "mpp-v$MPP_VERSION" /tmp/debs; \
+    fetch_deb rknn-runtime "$RKNN_RUNTIME_VERSION" "rknn-runtime-v$RKNN_RUNTIME_VERSION" /tmp/debs; \
     for deb in /tmp/debs/*.deb; do \
         dpkg-deb --extract "$deb" /opt/sysroot; \
     done \
     && rm -rf /tmp/dist-local /tmp/dist-build /tmp/debs
 
 # -----------------------------------------------------------------------------
-# 阶段 4c: 完整 sysroot = arm64-sysroot + ffmpeg deb。
+# 阶段 6: 交叉编译 ffmpeg-rockchip 并打包 deb。
 # 最终镜像用这个,用户链接时能找到所有 Rockchip 相关库。
 # -----------------------------------------------------------------------------
 
@@ -309,7 +344,7 @@ RUN BUILD_INPUT=/tmp/install \
     build-ffmpeg-rockchip-deb
 
 # -----------------------------------------------------------------------------
-# 阶段 3b: 交叉编译 gstreamer-rockchip 插件并打包 deb
+# 阶段 7: 交叉编译 gstreamer-rockchip 插件并打包 deb
 # JeffyCN 维护的 GStreamer Rockchip 插件(meson 工程),含 rockchipmpp
 # (MPP 硬件编解码)与 kmssrc(KMS 采集)插件。依赖 arm64-sysroot 里的
 # GStreamer dev 库和 librga/mpp deb。rkximage(X11 输出)在上游固定
@@ -356,11 +391,11 @@ RUN GST_ROCKCHIP_VERSION="$GST_ROCKCHIP_VERSION" \
     build-gstreamer-rockchip-deb
 
 # -----------------------------------------------------------------------------
-# 阶段 4: 组装 arm64 sysroot
+# 阶段 8: 组装完整 arm64 sysroot
 # sysroot 是交叉编译的目标环境根目录,包含 arm64 的头文件和库,
 # 交叉链接器只在这里面找依赖,保证不会误用宿主机的 amd64 库。
 #
-# 若 dist/ 或 GHCR Release 已提供对应版本的 librga/mpp/ffmpeg deb,
+# 若 dist/ 或 GitHub Release 已提供对应版本的 librga/mpp/RKNN/ffmpeg deb,
 # 则直接解包;否则回退到从源码编译(阶段 1-3)。
 # -----------------------------------------------------------------------------
 
@@ -373,7 +408,7 @@ RUN for deb in /tmp/debs-ffmpeg/*.deb; do \
     && rm -rf /tmp/debs-ffmpeg
 
 # -----------------------------------------------------------------------------
-# 汇总阶段: 把三个 deb 收集到 /out,方便 CI 用
+# 汇总阶段: 把所有 deb 收集到 /out,方便 CI 用
 #   docker build --target debs --output type=local,dest=dist .
 # 一条命令导出全部 deb。
 # -----------------------------------------------------------------------------
@@ -381,17 +416,22 @@ RUN for deb in /tmp/debs-ffmpeg/*.deb; do \
 FROM scratch AS debs
 COPY --from=librga-deb /out/ /out/
 COPY --from=mpp-deb /out/ /out/
+COPY --from=rknn-runtime-deb /out/ /out/
 COPY --from=ffmpeg-deb /out/ /out/
 COPY --from=gst-deb /out/ /out/
 
 # 单独导出每个 deb 的 scratch 阶段,供各 release workflow 用
-# --target librga-debs / mpp-debs / ffmpeg-debs / gst-rockchip-debs 导出。
+# --target librga-debs / mpp-debs / rknn-runtime-debs / ffmpeg-debs /
+# gst-rockchip-debs 导出。
 # 这些阶段只包含 /out 目录,--output type=local 导出干净。
 FROM scratch AS librga-debs
 COPY --from=librga-deb /out/ /
 
 FROM scratch AS mpp-debs
 COPY --from=mpp-deb /out/ /
+
+FROM scratch AS rknn-runtime-debs
+COPY --from=rknn-runtime-deb /out/ /
 
 FROM scratch AS ffmpeg-debs
 COPY --from=ffmpeg-deb /out/ /
@@ -400,7 +440,7 @@ FROM scratch AS gst-rockchip-debs
 COPY --from=gst-deb /out/ /
 
 # -----------------------------------------------------------------------------
-# 阶段 5: 最终镜像
+# 阶段 9: 最终镜像
 # 交叉工具链 + 完整 arm64 sysroot + CMake toolchain 文件 + 入口脚本。
 # 使用方式大致是:挂载源码目录到 /workspace/project,
 # 容器入口脚本会带着交叉编译环境执行构建命令。
@@ -409,6 +449,7 @@ COPY --from=gst-deb /out/ /
 FROM debian:${DEBIAN_RELEASE}
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG RKNN_RUNTIME_VERSION=2.3.2
 
 # 最终镜像里的构建工具:交叉编译器、CMake/Ninja、ccache(加速重复构建)
 RUN apt-get update \
@@ -423,7 +464,7 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 拷入包含 librga + mpp + ffmpeg-rockchip 的完整 sysroot
+# 拷入包含 librga + mpp + RKNN runtime + ffmpeg-rockchip 的完整 sysroot
 COPY --from=full-sysroot /opt/sysroot/ /opt/sysroot/
 # aarch64 的 CMake toolchain 文件(指定编译器、sysroot、find 规则)
 COPY cmake/aarch64-linux-gnu.cmake /opt/rk-builder/aarch64-linux-gnu.cmake
@@ -432,15 +473,22 @@ COPY scripts/entrypoint.sh /usr/local/bin/rk-cross-build
 # 构建期自检,尽早暴露 sysroot 问题:
 #   1. 关键动态库确实是 AArch64 架构(防止混进 amd64 库)
 #   2. FFmpeg 头文件里确实包含 RKMPP 硬件设备类型
+#   3. RKNN C API 头文件与 pkg-config 元数据已安装
 RUN chmod 0755 /usr/local/bin/rk-cross-build \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librga.so \
         | grep -q AArch64 \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librockchip_mpp.so \
         | grep -q AArch64 \
+    && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librknnrt.so \
+        | grep -q AArch64 \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/libavutil.so \
         | grep -q AArch64 \
     && grep -q AV_HWDEVICE_TYPE_RKMPP \
-        /opt/sysroot/usr/local/ans/include/libavutil/hwcontext.h
+        /opt/sysroot/usr/local/ans/include/libavutil/hwcontext.h \
+    && grep -q RKNN_SUCC /opt/sysroot/usr/local/ans/include/rknn_api.h \
+    && test "$(PKG_CONFIG_SYSROOT_DIR=/opt/sysroot \
+        PKG_CONFIG_LIBDIR=/opt/sysroot/usr/local/ans/lib/pkgconfig \
+        pkg-config --modversion rknnrt)" = "$RKNN_RUNTIME_VERSION"
 
 # 运行时环境:
 #   ccache 缓存目录指向挂载卷,跨容器构建也能命中缓存

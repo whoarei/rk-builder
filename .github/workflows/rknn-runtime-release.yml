@@ -1,0 +1,47 @@
+name: Build rknn-runtime deb
+
+on:
+  push:
+    tags: ["rknn-runtime-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Export rknn-runtime deb
+        run: |
+          docker build --target rknn-runtime-debs --output type=local,dest="$PWD/dist" .
+          ls -la dist/
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rknn-runtime-arm64
+          path: |
+            dist/*.deb
+            dist/*.sha256
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/rknn-runtime*.deb dist/rknn-runtime*.sha256 --clobber
+          else
+            VERSION=${GITHUB_REF_NAME#rknn-runtime-v}
+            gh release create "$GITHUB_REF_NAME" \
+              dist/rknn-runtime*.deb dist/rknn-runtime*.sha256 \
+              --verify-tag \
+              --generate-notes \
+              --title "rknn-runtime $VERSION ARM64 Debian package"
+          fi

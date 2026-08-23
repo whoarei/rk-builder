@@ -9,9 +9,9 @@ and a `-dev` package for the cross sysroot — all installed under the
 /usr/local/ans prefix. The `gst-rockchip` GStreamer plugin package is
 runtime-only (GStreamer plugins install no headers/pkg-config).
 
-- `Dockerfile`: multi-stage build — librga deb packaging, arm64 sysroot
-  assembly, Rockchip MPP, ffmpeg-rockchip, and gstreamer-rockchip plugin
-  cross-compiles, final image.
+- `Dockerfile`: multi-stage build — librga/RKNN runtime deb packaging, arm64
+  sysroot assembly, Rockchip MPP, ffmpeg-rockchip, and gstreamer-rockchip
+  plugin cross-compiles, final image.
 - `rk-builder.sh`: portable entry point using the cached or remote GHCR image.
 - `rk-builder-local.sh`: repository-local entry point that rebuilds the image
   from the Dockerfile before compiling a CMake project.
@@ -19,15 +19,18 @@ runtime-only (GStreamer plugins install no headers/pkg-config).
 - `scripts/`: `entrypoint.sh` (container entrypoint `rk-cross-build`) and
   `lib-deb-common.sh` (shared deb packaging helpers), and the standalone
   ARM64 deb packagers `build-librga-deb.sh`, `build-mpp-deb.sh`,
-  `build-ffmpeg-rockchip-deb.sh`, `build-gstreamer-rockchip-deb.sh`.
+  `build-rknn-runtime-deb.sh`, `build-ffmpeg-rockchip-deb.sh`,
+  `build-gstreamer-rockchip-deb.sh`.
 - `cmake/aarch64-linux-gnu.cmake`: CMake toolchain file (compiler, sysroot,
   find rules).
 - `librga/`: deb packaging templates (`control.in`, `librga.pc.in`).
 - `.github/workflows/`: `image.yml` (image CI) and deb release workflows
-  `librga-release.yml`, `mpp-release.yml`, `ffmpeg-rockchip-release.yml`,
-  `gst-rockchip-release.yml` on `librga-v*`, `mpp-v*`,
-  `ffmpeg-rockchip-v*`, `gst-rockchip-v*` tags respectively.
+  `librga-release.yml`, `mpp-release.yml`, `rknn-runtime-release.yml`,
+  `ffmpeg-rockchip-release.yml`, `gst-rockchip-release.yml` on `librga-v*`,
+  `mpp-v*`, `rknn-runtime-v*`, `ffmpeg-rockchip-v*`, `gst-rockchip-v*` tags
+  respectively.
 - `mpp/`: deb packaging templates (`control.in`, `rockchip_mpp.pc.in`)
+- `rknn-runtime/`: deb packaging templates (`control.in`, `rknnrt.pc.in`)
 - `ffmpeg-rockchip/`: deb packaging templates (`control.in`)
 - `gstreamer-rockchip/`: deb packaging templates (`control.in`) for the
   JeffyCN gstreamer-rockchip plugin package
@@ -48,7 +51,8 @@ runtime-only (GStreamer plugins install no headers/pkg-config).
 - `RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:latest ./rk-builder.sh
   examples/hello` — use the specified prebuilt image.
 - `./scripts/build-librga-deb.sh` / `build-mpp-deb.sh` /
-  `build-ffmpeg-rockchip-deb.sh` / `build-gstreamer-rockchip-deb.sh` —
+  `build-rknn-runtime-deb.sh` / `build-ffmpeg-rockchip-deb.sh` /
+  `build-gstreamer-rockchip-deb.sh` —
   produce the ARM64 debs under `dist/` plus their SHA-256 files. Each script
   emits two packages (runtime deb + `-dev` deb) except
   `build-gstreamer-rockchip-deb.sh`, which emits the runtime-only
@@ -72,9 +76,10 @@ device (see the "部署验证" section of `README.md`).
 ## Testing Guidelines
 
 There is no unit-test suite. Validation is build-time: the Dockerfile fails the
-build if librga/MPP/FFmpeg artifacts are not AArch64 or RKMPP is missing from
-the FFmpeg headers. End-to-end checks are the CI workflows and running the
-produced binary on a Rockchip device.
+build if librga/MPP/RKNN/FFmpeg artifacts are not AArch64, RKMPP is missing
+from the FFmpeg headers, or RKNN development metadata is incomplete.
+End-to-end checks are the CI workflows and running the produced binary on a
+Rockchip device.
 
 ## Commit & Pull Request Guidelines
 

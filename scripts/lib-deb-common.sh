@@ -3,6 +3,8 @@
 # 用法: 在打包脚本开头 source 本文件,然后按顺序调用:
 #   deb_common_init                          初始化 WORK_DIR/trap/路径变量
 #   deb_fetch_source <repo> <commit> <dest>  浅克隆源码并校验 commit
+#   deb_fetch_sparse_source <repo> <commit> <dest> <pattern...>
+#                                            稀疏拉取大型仓库的指定路径
 #   deb_render_control <tpl> <root> <ver> [kv...]  从 control.in 生成 DEBIAN/control
 #   deb_finish_package <root> <out> <name> <ver>  打 deb + sha256
 #
@@ -61,6 +63,38 @@ deb_fetch_source()
     git init --quiet "$dest_dir"
     git -C "$dest_dir" remote add origin "$repository"
     git -C "$dest_dir" fetch --quiet --depth 1 origin "$commit"
+    git -C "$dest_dir" checkout --quiet --detach FETCH_HEAD
+
+    if [[ $(git -C "$dest_dir" rev-parse HEAD) != "$commit" ]]; then
+        echo "commit verification failed for $repository" >&2
+        return 1
+    fi
+
+    SOURCE_DATE_EPOCH=$(git -C "$dest_dir" show -s --format=%ct HEAD)
+    export SOURCE_DATE_EPOCH
+}
+
+# deb_fetch_sparse_source <repository> <commit> <dest_dir> <pattern...>
+#
+# 对包含大体积模型或预编译依赖的仓库做 blobless partial clone，只检出打包
+# 所需路径。pattern 直接写入 sparse-checkout 文件，例如
+# /3rdparty/rknpu2/ 或 /LICENSE。显式设置 extensions.partialClone 是为了兼容
+# Debian 11 自带的 Git 2.30。
+deb_fetch_sparse_source()
+{
+    local repository=$1
+    local commit=$2
+    local dest_dir=$3
+    shift 3
+
+    git init --quiet "$dest_dir"
+    git -C "$dest_dir" remote add origin "$repository"
+    git -C "$dest_dir" config extensions.partialClone origin
+    git -C "$dest_dir" config remote.origin.promisor true
+    git -C "$dest_dir" config remote.origin.partialclonefilter blob:none
+    git -C "$dest_dir" config core.sparseCheckout true
+    printf '%s\n' "$@" > "$dest_dir/.git/info/sparse-checkout"
+    git -C "$dest_dir" fetch --quiet --depth 1 --filter=blob:none origin "$commit"
     git -C "$dest_dir" checkout --quiet --detach FETCH_HEAD
 
     if [[ $(git -C "$dest_dir" rev-parse HEAD) != "$commit" ]]; then

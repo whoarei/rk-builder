@@ -1,0 +1,10 @@
+prefix=/usr/local/ans
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: rknnrt
+Description: Rockchip RKNN neural network runtime
+Version: @VERSION@
+Libs: -L${libdir} -lrknnrt
+Cflags: -I${includedir}

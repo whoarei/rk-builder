@@ -13,6 +13,11 @@
 - Rockchip MPP：从 Rockchip 官方 `rockchip-linux/mpp` 源码交叉编译，固定在
   1.1.0 tag 的 commit `c08762ebfadeb4e986d2fed993bc7a54862d3ebe`（pkg-config
   版本 1.3.10）。
+- RKNN runtime：从 `airockchip/rknn_model_zoo` 封装 RKNPU2 Linux AArch64
+  官方开发包，固定在 2.3.2 tag 的 commit
+  `bad6c7334531becaf90a561988519b7bec34d0ab`。运行包提供
+  `librknnrt.so`，开发包提供 RKNN C API 头文件和 `rknnrt.pc`；适用于
+  RK356x、RK3576、RK3588 等 RKNPU2 平台。
 - FFmpeg：从 `nyanmisaka/ffmpeg-rockchip` 的 6.1 分支交叉编译，固定 commit
   `d547c18f18c744bc5e2180ce028fe1a6bd23ddad`，启用 `libdrm`、RKMPP 和 RKRGA。
 - GStreamer 插件：从 `JeffyCN/mirrors` 的 `gstreamer-rockchip` 分支交叉编译
@@ -20,7 +25,8 @@
   `dcbcd6454ef892e385b3a782600369eb6c0719db`。产出 `rockchipmpp`
   （MPP 硬件编解码）与 `kmssrc`（KMS 采集）插件；`rkximage`（X11 输出）
   在该 commit 有上游编译错误，构建时显式禁用。
-- deb 打包：librga / rockchip-mpp / ffmpeg-rockchip / gst-rockchip 共用
+- deb 打包：librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip /
+  gst-rockchip 共用
   `scripts/lib-deb-common.sh` 提供的初始化、源码拉取校验、control 渲染和
   打包函数，各组件脚本只保留编译与产物收集逻辑。
 
@@ -30,7 +36,8 @@ commit 发布的官方 ARM64 库，不是本地重编 librga。
 
 Debian 11 官方仓库仅提供 FFmpeg 4.3，且没有 Rockchip 的
 `AV_HWDEVICE_TYPE_RKMPP`。镜像会保留 Debian ARM64 包构成的基础 sysroot，再将
-上述 FFmpeg 6.1、MPP 和 RGA 安装到 `/opt/sysroot/usr/local/ans`，
+上述 FFmpeg 6.1、MPP、RGA 和 RKNN runtime 安装到
+`/opt/sysroot/usr/local/ans`，
 供工程优先使用。
 
 ## 编译工程
@@ -97,7 +104,8 @@ RK_BUILDER_IMAGE=ghcr.io/example/rk-builder:v1 JOBS=8 ./rk-builder.sh
 
 ## 单独生成 deb 包
 
-librga / rockchip-mpp / ffmpeg-rockchip 每个组件都会产出两个 ARM64 deb：
+librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip 每个组件都会产出
+两个 ARM64 deb：
 安装在目标设备上的运行包（含共享库，ffmpeg 还含 `ffmpeg`/`ffprobe` 等
 二进制），以及只在交叉编译 sysroot 里使用的 `-dev` 开发包（头文件、
 链接器符号链接、pkg-config）。所有包统一安装到 `/usr/local/ans`，
@@ -111,6 +119,7 @@ librga / rockchip-mpp / ffmpeg-rockchip 每个组件都会产出两个 ARM64 deb
 
 - `librga` / `librga-dev`
 - `rockchip-mpp` / `rockchip-mpp-dev`
+- `rknn-runtime` / `rknn-runtime-dev`
 - `ffmpeg-rockchip` / `ffmpeg-rockchip-dev`
 - `gst-rockchip`（只有运行包：GStreamer 插件没有头文件和 pkg-config，
   不产出 `-dev` 包。插件安装在 `/usr/local/ans/lib/gstreamer-1.0`，
@@ -133,6 +142,7 @@ docker build --target debs --output type=local,dest=dist .
 ```bash
 docker build --target librga-debs --output type=local,dest=dist .
 docker build --target mpp-debs --output type=local,dest=dist .
+docker build --target rknn-runtime-debs --output type=local,dest=dist .
 docker build --target ffmpeg-debs --output type=local,dest=dist .
 docker build --target gst-rockchip-debs --output type=local,dest=dist .
 # 单独导出时 deb 直接在 dist/ 下
@@ -142,6 +152,7 @@ docker build --target gst-rockchip-debs --output type=local,dest=dist .
 
 - `librga_1.10.6_arm64.deb`、`librga-dev_1.10.6_arm64.deb`
 - `rockchip-mpp_1.1.0_arm64.deb`、`rockchip-mpp-dev_1.1.0_arm64.deb`
+- `rknn-runtime_2.3.2_arm64.deb`、`rknn-runtime-dev_2.3.2_arm64.deb`
 - `ffmpeg-rockchip_6.1.0-1_arm64.deb`、`ffmpeg-rockchip-dev_6.1.0-1_arm64.deb`
 - `gst-rockchip_1.14.4_arm64.deb`
 
@@ -149,6 +160,7 @@ docker build --target gst-rockchip-debs --output type=local,dest=dist .
 
 - `librga-v1.10.6` → librga deb
 - `mpp-v1.1.0` → rockchip-mpp deb
+- `rknn-runtime-v2.3.2` → rknn-runtime deb
 - `ffmpeg-rockchip-v6.1.0-1` → ffmpeg-rockchip deb
 - `gst-rockchip-v1.14.4` → gst-rockchip deb
 
@@ -159,9 +171,9 @@ GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强
 ## GitHub Actions
 
 - `image.yml`：验证 Dockerfile；对 main/tag 构建并推送
-  `ghcr.io/<owner>/rk-builder`。
-- `librga-release.yml` / `mpp-release.yml` / `ffmpeg-rockchip-release.yml` /
-  `gst-rockchip-release.yml`：分别生成对应组件的 ARM64 deb 工件；对
-  `librga-v*` / `mpp-v*` / `ffmpeg-rockchip-v*` / `gst-rockchip-v*` tag
-  创建 GitHub Release。四个工作流结构一致，只是构建目标
-  （`librga-debs` / `mpp-debs` / `ffmpeg-debs` / `gst-rockchip-debs`）不同。
+  `ghcr.io/<owner>/rk-builder`。版本 tag 同时发布带 `v` 和不带 `v` 的镜像
+  tag（例如 `v0.3.0` 与 `0.3.0`）。
+- `librga-release.yml` / `mpp-release.yml` / `rknn-runtime-release.yml` /
+  `ffmpeg-rockchip-release.yml` / `gst-rockchip-release.yml`：分别生成对应组件的
+  ARM64 deb 工件；对 `librga-v*` / `mpp-v*` / `rknn-runtime-v*` /
+  `ffmpeg-rockchip-v*` / `gst-rockchip-v*` tag 创建 GitHub Release。
