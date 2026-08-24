@@ -189,6 +189,9 @@ librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip / libdrm / Mesa / Qt
 deb 会发布到 GitHub Release，镜像构建时优先复用这些预编译 deb，
 只有缺失或版本不匹配时才从源码编译。
 
+各正式镜像版本实际对应的 Release deb 文件见
+[`docs/image-release-debs.md`](docs/image-release-debs.md)。
+
 本地导出全部 deb（通过 Docker 多阶段构建）：
 
 ```bash
