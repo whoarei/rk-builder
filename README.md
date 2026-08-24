@@ -102,6 +102,25 @@ RK_BUILDER_IMAGE=ghcr.io/example/rk-builder:v1 JOBS=8 ./rk-builder.sh
 两个脚本都会在编译项目前打印镜像、工程目录、构建类型、并行数和 CMake 参数，
 并在交互式终端中等待确认；`--script` 或 CI 等非交互环境会自动跳过确认。
 
+### RKNN 开发环境测试
+
+`examples/rknn` 通过 `pkg-config rknnrt` 查找 RKNN 头文件和链接库，编译一个
+板端 smoke test。该程序加载指定的 `.rknn` 模型，调用 `rknn_init`，查询
+RKNN API/驱动版本，然后调用 `rknn_destroy`：
+
+```bash
+RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:0.3.0 \
+    ./rk-builder.sh --script examples/rknn
+file examples/rknn/build/release/rknn-smoke
+```
+
+交叉编译只验证开发环境；程序需复制到安装了 `rknn-runtime`、具有匹配 NPU
+驱动的 Rockchip 设备上运行，并传入该设备支持的 RKNN 模型：
+
+```bash
+./rknn-smoke /path/to/model.rknn
+```
+
 ## 单独生成 deb 包
 
 librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip 每个组件都会产出
