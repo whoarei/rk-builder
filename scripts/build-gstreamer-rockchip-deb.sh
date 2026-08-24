@@ -146,6 +146,6 @@ chmod 0644 "$RUNTIME_ROOT/etc/profile.d/gst-rockchip1.0.sh"
 deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$GST_ROCKCHIP_VERSION" \
     PACKAGE=gst-rockchip \
     SECTION=libs \
-    DEPENDS="gstreamer1.0-plugins-base (>= 1.14), rockchip-mpp (>= 1.1.0), librga (>= 1.10.6), libdrm2 (>= 2.4), libglib2.0-0 (>= 2.32), libc6 (>= 2.17)" \
+    DEPENDS="gstreamer1.0-plugins-base (>= 1.14), rockchip-mpp (>= 1.3.10), librga (>= 1.10.6), libdrm2 (>= 2.4), libglib2.0-0 (>= 2.32), libc6 (>= 2.17)" \
     DESCRIPTION="GStreamer Rockchip hardware codec plugins (rockchipmpp, kmssrc)"
 deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" gst-rockchip "$GST_ROCKCHIP_VERSION"

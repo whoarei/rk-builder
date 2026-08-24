@@ -1,0 +1,32 @@
+name: Build libdrm debs
+
+on:
+  push:
+    tags: ["libdrm-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Export libdrm debs
+        run: docker build --target libdrm-debs --output type=local,dest="$PWD/dist" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libdrm-arm64
+          path: |
+            dist/*.deb
+            dist/*.sha256
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/*.sha256 \
+            --verify-tag --generate-notes --title "libdrm 2.4.124 ARM64 Debian packages"
+

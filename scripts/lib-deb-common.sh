@@ -173,7 +173,7 @@ deb_add_runtime_paths()
 #   package_root  deb 包根目录(须已包含 DEBIAN/control 和全部文件)
 #   out_dir       输出目录
 #   name          deb 包名(如 rockchip-mpp-dev)
-#   version       版本号(如 1.1.0)
+#   version       版本号(如 1.3.10)
 deb_finish_package()
 {
     local package_root=$1

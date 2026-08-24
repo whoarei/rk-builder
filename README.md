@@ -5,21 +5,28 @@
 
 ## 设计
 
-- 构建工具：Debian 11 amd64 官方 GCC 10 交叉工具链。
+- 构建工具：Debian 11 amd64 官方 GCC 10 交叉工具链和固定的 Kitware
+  amd64 CMake 3.28.6。
 - 目标 sysroot：通过 Debian multiarch 下载官方 `:arm64` 包，解包到
   `/opt/sysroot`。不执行任何 ARM64 `postinst`。
 - Rockchip RGA：固定 `airockchip/librga` 1.10.6 commit
   `2b32edcb97b601b25683e2941d888c8515da6d55`，先生成 ARM64 deb，再解包进 sysroot。
 - Rockchip MPP：从 Rockchip 官方 `rockchip-linux/mpp` 源码交叉编译，固定在
-  1.1.0 tag 的 commit `c08762ebfadeb4e986d2fed993bc7a54862d3ebe`（pkg-config
-  版本 1.3.10）。
+  1.1.0 tag 的 commit `c08762ebfadeb4e986d2fed993bc7a54862d3ebe`；源码接口、
+  pkg-config 和 deb 版本统一为 1.3.10。
 - RKNN runtime：从 `airockchip/rknn_model_zoo` 封装 RKNPU2 Linux AArch64
   官方开发包，固定在 2.3.2 tag 的 commit
   `bad6c7334531becaf90a561988519b7bec34d0ab`。运行包提供
   `librknnrt.so`，开发包提供 RKNN C API 头文件和 `rknnrt.pc`；适用于
   RK356x、RK3576、RK3588 等 RKNPU2 平台。
-- FFmpeg：从 `nyanmisaka/ffmpeg-rockchip` 的 6.1 分支交叉编译，固定 commit
-  `d547c18f18c744bc5e2180ce028fe1a6bd23ddad`，启用 `libdrm`、RKMPP 和 RKRGA。
+- FFmpeg：从 `nyanmisaka/ffmpeg-rockchip` 的 6.1 分支交叉编译，基线版本
+  6.1.6，固定 commit `705345ee866866d3ea5521c89c5abd9d0b0a245b`，启用
+  GPL、x264、GnuTLS、`libdrm`、RKMPP 和 RKRGA；deb 版本为 6.1.6。
+- 桌面图形栈：交叉编译 libdrm 2.4.124 与 Mesa 25.0.7；Mesa 启用 X11、
+  EGL、GBM、GLES2、GLX/GLVND 和 `panfrost,softpipe` Gallium drivers。
+- Qt：`/opt/qt-host/6.2.4` 提供 amd64 `moc/uic/rcc`，sysroot 中提供安装到
+  `/usr/local/ans` 的 ARM64 qtbase/qtsvg GLES2 target libraries。host Qt
+  不会进入目标 `CMAKE_PREFIX_PATH` 或 ARM64 deb。
 - GStreamer 插件：从 `JeffyCN/mirrors` 的 `gstreamer-rockchip` 分支交叉编译
   （meson 工程），固定 commit
   `dcbcd6454ef892e385b3a782600369eb6c0719db`。产出 `rockchipmpp`
@@ -102,6 +109,35 @@ RK_BUILDER_IMAGE=ghcr.io/example/rk-builder:v1 JOBS=8 ./rk-builder.sh
 两个脚本都会在编译项目前打印镜像、工程目录、构建类型、并行数和 CMake 参数，
 并在交互式终端中等待确认；`--script` 或 CI 等非交互环境会自动跳过确认。
 
+### Qt 6 开发环境测试
+
+`examples/qt` 会查找 target Qt6 Widgets/Svg，并通过 amd64 host Qt 运行
+AUTOMOC。生成程序仍是 ARM64，只能在目标设备运行：
+
+```bash
+./rk-builder.sh --script examples/qt
+file examples/qt/build/release/qt-cross-smoke
+```
+
+### OBS 32 交叉编译
+
+OBS 源码仓库中的 `obs-build.sh` 负责 OBS 专用 feature 开关与 CPack；
+`rk-builder.sh` 和 `rk-cross-build` 保持通用：
+
+```bash
+cd /path/to/rk-builder
+docker build -t rk-builder:debian11-arm64 .
+
+cd /path/to/obs-studio
+RK_BUILDER_SH=/path/to/rk-builder/rk-builder.sh \
+RK_BUILDER_IMAGE=rk-builder:debian11-arm64 \
+    ./obs-build.sh
+```
+
+脚本先通过通用入口完成 configure/build，再用同一镜像、相同 mounts 和
+`--entrypoint cmake` 执行 `package` target。deb 与 SHA-256 清单写到
+`obs-studio/build/dist/`，整个流程不需要 QEMU 或 binfmt。
+
 ### RKNN 开发环境测试
 
 `examples/rknn` 通过 `pkg-config rknnrt` 查找 RKNN 头文件和链接库，编译一个
@@ -109,7 +145,7 @@ RK_BUILDER_IMAGE=ghcr.io/example/rk-builder:v1 JOBS=8 ./rk-builder.sh
 RKNN API/驱动版本，然后调用 `rknn_destroy`：
 
 ```bash
-RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:0.3.0 \
+RK_BUILDER_IMAGE=ghcr.io/whoarei/rk-builder:0.4.0 \
     ./rk-builder.sh --script examples/rknn
 file examples/rknn/build/release/rknn-smoke
 ```
@@ -123,7 +159,8 @@ file examples/rknn/build/release/rknn-smoke
 
 ## 单独生成 deb 包
 
-librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip 每个组件都会产出
+librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip / libdrm / Mesa / Qt
+每个组件都会产出
 两个 ARM64 deb：
 安装在目标设备上的运行包（含共享库，ffmpeg 还含 `ffmpeg`/`ffprobe` 等
 二进制），以及只在交叉编译 sysroot 里使用的 `-dev` 开发包（头文件、
@@ -140,6 +177,9 @@ librga / rockchip-mpp / rknn-runtime / ffmpeg-rockchip 每个组件都会产出
 - `rockchip-mpp` / `rockchip-mpp-dev`
 - `rknn-runtime` / `rknn-runtime-dev`
 - `ffmpeg-rockchip` / `ffmpeg-rockchip-dev`
+- `libdrm-ans` / `libdrm-ans-dev`
+- `mesa25-ans` / `mesa25-ans-dev`
+- `qt6-ans` / `qt6-ans-dev`
 - `gst-rockchip`（只有运行包：GStreamer 插件没有头文件和 pkg-config，
   不产出 `-dev` 包。插件安装在 `/usr/local/ans/lib/gstreamer-1.0`，
   系统 GStreamer 不会自动扫描该目录，运行包通过
@@ -164,24 +204,33 @@ docker build --target mpp-debs --output type=local,dest=dist .
 docker build --target rknn-runtime-debs --output type=local,dest=dist .
 docker build --target ffmpeg-debs --output type=local,dest=dist .
 docker build --target gst-rockchip-debs --output type=local,dest=dist .
+docker build --target libdrm-debs --output type=local,dest=dist .
+docker build --target mesa-debs --output type=local,dest=dist .
+docker build --target qt6-debs --output type=local,dest=dist .
 # 单独导出时 deb 直接在 dist/ 下
 ```
 
 输出到 `dist/` 目录，例如：
 
 - `librga_1.10.6_arm64.deb`、`librga-dev_1.10.6_arm64.deb`
-- `rockchip-mpp_1.1.0_arm64.deb`、`rockchip-mpp-dev_1.1.0_arm64.deb`
+- `rockchip-mpp_1.3.10_arm64.deb`、`rockchip-mpp-dev_1.3.10_arm64.deb`
 - `rknn-runtime_2.3.2_arm64.deb`、`rknn-runtime-dev_2.3.2_arm64.deb`
-- `ffmpeg-rockchip_6.1.0-1_arm64.deb`、`ffmpeg-rockchip-dev_6.1.0-1_arm64.deb`
+- `ffmpeg-rockchip_6.1.6_arm64.deb`、`ffmpeg-rockchip-dev_6.1.6_arm64.deb`
 - `gst-rockchip_1.14.4_arm64.deb`
+- `libdrm-ans_2.4.124_arm64.deb`、`libdrm-ans-dev_2.4.124_arm64.deb`
+- `mesa25-ans_25.0.7_arm64.deb`、`mesa25-ans-dev_25.0.7_arm64.deb`
+- `qt6-ans_6.2.4_arm64.deb`、`qt6-ans-dev_6.2.4_arm64.deb`
 
 推送对应 tag 会触发 GitHub Actions 构建 deb 并发布 Release：
 
 - `librga-v1.10.6` → librga deb
-- `mpp-v1.1.0` → rockchip-mpp deb
+- `mpp-v1.3.10` → rockchip-mpp deb
 - `rknn-runtime-v2.3.2` → rknn-runtime deb
-- `ffmpeg-rockchip-v6.1.0-1` → ffmpeg-rockchip deb
+- `ffmpeg-rockchip-v6.1.6` → ffmpeg-rockchip deb
 - `gst-rockchip-v1.14.4` → gst-rockchip deb
+- `libdrm-v2.4.124` → libdrm deb
+- `mesa-v25.0.7` → Mesa deb
+- `qt6-v6.2.4` → Qt 6 deb
 
 镜像构建默认开启 `USE_LOCAL_DEBS=ON`：优先用本地 `dist/` 里的 deb，其次
 GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强制
@@ -191,8 +240,10 @@ GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强
 
 - `image.yml`：验证 Dockerfile；对 main/tag 构建并推送
   `ghcr.io/<owner>/rk-builder`。版本 tag 同时发布带 `v` 和不带 `v` 的镜像
-  tag（例如 `v0.3.0` 与 `0.3.0`）。
+  tag（例如 `v0.4.0` 与 `0.4.0`）。
 - `librga-release.yml` / `mpp-release.yml` / `rknn-runtime-release.yml` /
   `ffmpeg-rockchip-release.yml` / `gst-rockchip-release.yml`：分别生成对应组件的
   ARM64 deb 工件；对 `librga-v*` / `mpp-v*` / `rknn-runtime-v*` /
   `ffmpeg-rockchip-v*` / `gst-rockchip-v*` tag 创建 GitHub Release。
+- `libdrm-release.yml` / `mesa-release.yml` / `qt6-release.yml`：分别生成
+  libdrm、Mesa 与 Qt runtime/dev deb，并由对应版本 tag 发布。

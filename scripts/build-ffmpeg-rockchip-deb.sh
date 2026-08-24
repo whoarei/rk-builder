@@ -21,8 +21,8 @@ set -euo pipefail
 _script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$_script_dir/lib-deb-common.sh"
 
-FFMPEG_VERSION=${FFMPEG_VERSION:-6.1.0-1}
-FFMPEG_COMMIT=${FFMPEG_COMMIT:-d547c18f18c744bc5e2180ce028fe1a6bd23ddad}
+FFMPEG_VERSION=${FFMPEG_VERSION:-6.1.6}
+FFMPEG_COMMIT=${FFMPEG_COMMIT:-705345ee866866d3ea5521c89c5abd9d0b0a245b}
 FFMPEG_REPOSITORY=${FFMPEG_REPOSITORY:-https://github.com/nyanmisaka/ffmpeg-rockchip.git}
 BUILD_INPUT=${BUILD_INPUT:-}
 PREFIX=/usr/local/ans
@@ -78,7 +78,7 @@ copy_license "$RUNTIME_ROOT/usr/share/doc/ffmpeg-rockchip/copyright"
 deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$FFMPEG_VERSION" \
     PACKAGE=ffmpeg-rockchip \
     SECTION=libs \
-    DEPENDS="rockchip-mpp (>= 1.1.0), librga (>= 1.10.6), libdrm2 (>= 2.4), libc6 (>= 2.17)" \
+    DEPENDS="rockchip-mpp (>= 1.3.10), librga (>= 1.10.6), libdrm-ans (>= 2.4.124), libgnutls30, libx264-160, libc6 (>= 2.17)" \
     DESCRIPTION="FFmpeg with Rockchip hardware acceleration, rkmpp/rkrga (runtime)"
 deb_add_runtime_paths "$RUNTIME_ROOT" ffmpeg-rockchip
 deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" ffmpeg-rockchip "$FFMPEG_VERSION"
@@ -100,6 +100,6 @@ copy_license "$DEV_ROOT/usr/share/doc/ffmpeg-rockchip-dev/copyright"
 deb_render_control "$PACKAGING_DIR/control.in" "$DEV_ROOT" "$FFMPEG_VERSION" \
     PACKAGE=ffmpeg-rockchip-dev \
     SECTION=libdevel \
-    DEPENDS="ffmpeg-rockchip (= $FFMPEG_VERSION), rockchip-mpp-dev (>= 1.1.0), librga-dev (>= 1.10.6), libdrm2 (>= 2.4), libc6 (>= 2.17)" \
+    DEPENDS="ffmpeg-rockchip (= $FFMPEG_VERSION), rockchip-mpp-dev (>= 1.3.10), librga-dev (>= 1.10.6), libdrm-ans-dev (>= 2.4.124), libgnutls28-dev, libx264-dev, libc6-dev" \
     DESCRIPTION="FFmpeg with Rockchip hardware acceleration, rkmpp/rkrga (development files)"
 deb_finish_package "$DEV_ROOT" "$OUT_DIR" ffmpeg-rockchip-dev "$FFMPEG_VERSION"

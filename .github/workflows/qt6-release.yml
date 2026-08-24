@@ -1,0 +1,31 @@
+name: Build Qt 6 debs
+
+on:
+  push:
+    tags: ["qt6-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Export Qt 6 debs
+        run: docker build --target qt6-debs --output type=local,dest="$PWD/dist" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qt6-ans-arm64
+          path: |
+            dist/*.deb
+            dist/*.sha256
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/*.deb dist/*.sha256 \
+            --verify-tag --generate-notes --title "Qt 6.2.4 ARM64 Debian packages"

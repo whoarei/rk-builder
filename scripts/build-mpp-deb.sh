@@ -18,8 +18,7 @@ set -euo pipefail
 _script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$_script_dir/lib-deb-common.sh"
 
-MPP_VERSION=${MPP_VERSION:-1.1.0}
-MPP_PC_VERSION=${MPP_PC_VERSION:-1.3.10}
+MPP_VERSION=${MPP_VERSION:-1.3.10}
 MPP_COMMIT=${MPP_COMMIT:-c08762ebfadeb4e986d2fed993bc7a54862d3ebe}
 MPP_REPOSITORY=${MPP_REPOSITORY:-https://github.com/rockchip-linux/mpp.git}
 BUILD_INPUT=${BUILD_INPUT:-}
@@ -99,7 +98,7 @@ find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type l -name 'lib*.so' \
 
 # MPP 上游不生成 pkg-config 文件,这里补上。模板同时加入 include/ 和
 # include/rockchip/,兼容 #include <rockchip/rk_mpi.h> 与 <rk_mpi.h>。
-sed "s/@PC_VERSION@/$MPP_PC_VERSION/g" \
+sed "s/@PC_VERSION@/$MPP_VERSION/g" \
     "$PACKAGING_DIR/rockchip_mpp.pc.in" \
     > "$DEV_ROOT$PREFIX/lib/pkgconfig/rockchip_mpp.pc"
 

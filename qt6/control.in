@@ -1,0 +1,10 @@
+Package: @PACKAGE@
+Version: @VERSION@
+Section: @SECTION@
+Priority: optional
+Architecture: arm64
+Maintainer: rk-builder maintainers <whoarei@users.noreply.github.com>
+Depends: @DEPENDS@
+Homepage: https://www.qt.io/
+Description: @DESCRIPTION@
+
