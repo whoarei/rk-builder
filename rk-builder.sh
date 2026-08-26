@@ -8,6 +8,7 @@ BUILD_TYPE=Release
 CMAKE_ARGS=()
 PROJECT_DIR_SET=false
 SCRIPT_MODE=false
+APP_SUBDIR=""
 
 usage()
 {
@@ -20,6 +21,11 @@ Arguments:
 Options:
   -d, --debug          Build in Debug mode (default: Release)
   --release            Build in Release mode
+  -a, --app SUBDIR     Build PROJECT_DIR/SUBDIR instead of the whole project.
+                       The whole PROJECT_DIR is still mounted, so SUBDIR can
+                       reference sibling directories via add_subdirectory.
+                       Requires SUBDIR/CMakeLists.txt. Artifacts are written
+                       to PROJECT_DIR/build/<release|debug>/SUBDIR/.
   --script             Skip the interactive confirmation
   -h, --help           Show this help
 
@@ -48,6 +54,15 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             usage
             exit 0
+            ;;
+        -a|--app)
+            if [[ $# -lt 2 ]]; then
+                echo "$1 requires a subdirectory argument" >&2
+                usage >&2
+                exit 2
+            fi
+            APP_SUBDIR=$2
+            shift 2
             ;;
         --)
             shift
@@ -83,7 +98,24 @@ if [[ ! -f $PROJECT_DIR/CMakeLists.txt ]]; then
     exit 1
 fi
 
-BUILD_DIR=$PROJECT_DIR/build/${BUILD_TYPE,,}
+SOURCE_SUBDIR=""
+if [[ -n $APP_SUBDIR ]]; then
+    if [[ $APP_SUBDIR = /* || $APP_SUBDIR == *..* ]]; then
+        echo "--app must be a relative path below PROJECT_DIR: $APP_SUBDIR" >&2
+        exit 2
+    fi
+    if [[ ! -f $PROJECT_DIR/$APP_SUBDIR/CMakeLists.txt ]]; then
+        echo "CMakeLists.txt not found in $PROJECT_DIR/$APP_SUBDIR" >&2
+        exit 1
+    fi
+    SOURCE_SUBDIR=$APP_SUBDIR
+fi
+
+if [[ -n $SOURCE_SUBDIR ]]; then
+    BUILD_DIR=$PROJECT_DIR/build/${BUILD_TYPE,,}/$SOURCE_SUBDIR
+else
+    BUILD_DIR=$PROJECT_DIR/build/${BUILD_TYPE,,}
+fi
 CCACHE_DIR=$PROJECT_DIR/.ccache
 mkdir -p "$BUILD_DIR" "$CCACHE_DIR"
 
@@ -106,6 +138,7 @@ cat <<EOF
   Image digest   : $IMAGE_DIGEST
   Image created  : $IMAGE_CREATED
   Project dir    : $PROJECT_DIR
+  App subdir     : ${SOURCE_SUBDIR:-<whole project>}
   Build dir      : $BUILD_DIR
   Build type     : $BUILD_TYPE
   Jobs           : ${JOBS:-<auto>}
@@ -136,6 +169,10 @@ RUN_ARGS=(
 
 if [[ -n ${JOBS:-} ]]; then
     RUN_ARGS+=(--env "JOBS=$JOBS")
+fi
+
+if [[ -n $SOURCE_SUBDIR ]]; then
+    RUN_ARGS+=(--env "SOURCE_DIR=/workspace/project/$SOURCE_SUBDIR")
 fi
 
 docker run "${RUN_ARGS[@]}" "$IMAGE" "${CMAKE_ARGS[@]}"

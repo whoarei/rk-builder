@@ -77,6 +77,23 @@ cd /path/to/project
 ./rk-builder-local.sh --script /path/to/project
 ```
 
+### 只编译工程中的子目录
+
+多可执行文件工程常把每个程序放在独立目录里，并共享同级的库目录（如
+`aslbase/`）。这类工程可用 `--app`（或 `-a`）只编译某个子目录：整个
+`PROJECT_DIR` 仍会挂载进容器，因此子目录的 CMakeLists 可以通过
+`add_subdirectory(../xxx)` 相对路径引用兄弟目录。`SUBDIR/CMakeLists.txt`
+必须存在；产物写入 `PROJECT_DIR/build/<release|debug>/SUBDIR/`，不会
+污染整工程扁平构建的输出目录：
+
+```bash
+cd /path/to/project
+./rk-builder.sh -a appmanager
+./rk-builder.sh --app apps/appmanager -d
+```
+
+该功能通过容器入口点已有的 `SOURCE_DIR` 环境变量实现，脚本可配合旧版镜像使用。
+
 需要从本仓库的 Dockerfile 重新构建本地镜像时，使用
 `rk-builder-local.sh`；其项目目录和 CMake 参数用法相同：
 

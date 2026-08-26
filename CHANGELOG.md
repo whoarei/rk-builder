@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 - 2026-08-27
+
+- `rk-builder.sh` 新增 `-a/--app <SUBDIR>`：在多应用工程中只交叉编译
+  `PROJECT_DIR/SUBDIR` 子目录。整个工程仍挂载进容器（子目录可引用兄弟
+  目录），产物写入 `build/<release|debug>/SUBDIR/`。功能通过容器入口点
+  已有的 `SOURCE_DIR` 环境变量实现，`rk-cross-build` 与镜像无变化，
+  新脚本可配合旧版镜像使用。
+
 ## 0.4.0 - 2026-08-24
 
 - 将 Rockchip MPP deb 与 pkg-config 版本统一为 1.3.10，源码继续固定在
