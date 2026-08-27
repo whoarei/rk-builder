@@ -80,6 +80,8 @@ rm -rf "$RUNTIME_ROOT$PREFIX/include" \
     "$RUNTIME_ROOT$PREFIX/lib/pkgconfig"
 find "$RUNTIME_ROOT$PREFIX" -type f \( -name '*.a' -o -name '*.la' \) -delete
 find "$RUNTIME_ROOT$PREFIX/lib" -maxdepth 1 -type l -name '*.so' -delete
+# mesa25-run 环境包装脚本随运行包一起发布,安装到 /usr/local/ans/bin
+install -Dm 0755 "$PACKAGING_DIR/mesa25-run" "$RUNTIME_ROOT$PREFIX/bin/mesa25-run"
 install -m 0644 "$SOURCE_DIR/docs/license.rst" "$RUNTIME_ROOT/usr/share/doc/mesa25-ans/copyright"
 
 deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$MESA_VERSION" \
