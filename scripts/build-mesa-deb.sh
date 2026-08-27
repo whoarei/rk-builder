@@ -63,6 +63,15 @@ meson setup "$BUILD_DIR" "$SOURCE_DIR" \
 meson compile -C "$BUILD_DIR" -j "$(nproc)"
 DESTDIR="$INSTALL_DIR" meson install -C "$BUILD_DIR"
 
+# Do not leave EGL vendor resolution to the BSP's dynamic-loader ordering.
+# The target keeps Debian GLVND and the vendor libmali package installed, so
+# point GLVND directly at this package's Mesa implementation.
+EGL_VENDOR_JSON="$INSTALL_DIR$PREFIX/share/glvnd/egl_vendor.d/50_mesa.json"
+sed -i \
+    "s#\"libEGL_mesa.so.0\"#\"$PREFIX/lib/libEGL_mesa.so.0\"#" \
+    "$EGL_VENDOR_JSON"
+grep -q "\"$PREFIX/lib/libEGL_mesa.so.0\"" "$EGL_VENDOR_JSON"
+
 for library in \
     "$INSTALL_DIR$PREFIX/lib/dri/panfrost_dri.so" \
     "$INSTALL_DIR$PREFIX/lib/dri/panthor_dri.so" \
@@ -73,23 +82,40 @@ for library in \
     aarch64-linux-gnu-readelf -h "$library" | grep -q AArch64
 done
 
-mkdir -p "$RUNTIME_ROOT/usr/local" "$RUNTIME_ROOT/usr/share/doc/mesa25-ans"
+mkdir -p \
+    "$RUNTIME_ROOT/usr/local" \
+    "$RUNTIME_ROOT/usr/share/doc/mesa25-ans" \
+    "$RUNTIME_ROOT/etc/ld.so.conf.d" \
+    "$RUNTIME_ROOT/etc/systemd/system/lightdm.service.d" \
+    "$RUNTIME_ROOT/etc/lightdm/lightdm.conf.d"
 cp -a "$INSTALL_DIR$PREFIX" "$RUNTIME_ROOT/usr/local/"
 rm -rf "$RUNTIME_ROOT$PREFIX/include" \
     "$RUNTIME_ROOT$PREFIX/lib/cmake" \
     "$RUNTIME_ROOT$PREFIX/lib/pkgconfig"
 find "$RUNTIME_ROOT$PREFIX" -type f \( -name '*.a' -o -name '*.la' \) -delete
 find "$RUNTIME_ROOT$PREFIX/lib" -maxdepth 1 -type l -name '*.so' -delete
-# mesa25-run 环境包装脚本随运行包一起发布,安装到 /usr/local/ans/bin
 install -Dm 0755 "$PACKAGING_DIR/mesa25-run" "$RUNTIME_ROOT$PREFIX/bin/mesa25-run"
+install -Dm 0755 "$PACKAGING_DIR/mesa25-xorg" "$RUNTIME_ROOT$PREFIX/bin/mesa25-xorg"
+install -Dm 0644 "$PACKAGING_DIR/01-xorg-glamor.conf" \
+    "$RUNTIME_ROOT$PREFIX/share/drirc.d/01-xorg-glamor.conf"
+install -Dm 0644 "$PACKAGING_DIR/20-modesetting.conf" \
+    "$RUNTIME_ROOT$PREFIX/share/rk-builder/mesa25-xorg.conf"
+mkdir -p "$RUNTIME_ROOT$PREFIX/share/rk-builder/xorg.conf.d"
+install -m 0644 "$PACKAGING_DIR/lightdm.conf" \
+    "$RUNTIME_ROOT/etc/systemd/system/lightdm.service.d/mesa25-ans.conf"
+install -m 0644 "$PACKAGING_DIR/lightdm-xserver.conf" \
+    "$RUNTIME_ROOT/etc/lightdm/lightdm.conf.d/90-mesa25-ans.conf"
 install -m 0644 "$SOURCE_DIR/docs/license.rst" "$RUNTIME_ROOT/usr/share/doc/mesa25-ans/copyright"
+printf '%s\n' '/usr/local/ans/lib' \
+    > "$RUNTIME_ROOT/etc/ld.so.conf.d/00-ans-mesa25-ans.conf"
 
 deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$MESA_VERSION" \
     PACKAGE=mesa25-ans \
     SECTION=libs \
-    DEPENDS="libdrm-ans (>= 2.4.124), libc6, libgcc-s1, libstdc++6, libexpat1, libglvnd0, libx11-6, libx11-xcb1, libxcb1, libxcb-dri2-0, libxcb-dri3-0, libxcb-glx0, libxcb-present0, libxcb-randr0, libxcb-shm0, libxcb-sync1, libxcb-xfixes0, libxext6, libxfixes3, libxshmfence1, libxxf86vm1, zlib1g" \
+    DEPENDS="xserver-common (>= 2:1.20.11-1+deb11u17), xserver-xorg-core (>= 2:1.20.11-1+deb11u17), libdrm-ans (>= 2.4.124), libc6, libgcc-s1, libstdc++6, libegl1, libgles2, libgl1, libglvnd0, libexpat1, libudev1, libx11-6, libx11-xcb1, libxcb1, libxcb-dri2-0, libxcb-dri3-0, libxcb-glx0, libxcb-present0, libxcb-randr0, libxcb-shm0, libxcb-sync1, libxcb-xfixes0, libxext6, libxfixes3, libxshmfence1, libxxf86vm1, zlib1g" \
     DESCRIPTION="Mesa $MESA_VERSION Panfrost/Panthor EGL, GLES, GLX and GBM stack (runtime)"
-deb_add_runtime_paths "$RUNTIME_ROOT" mesa25-ans
+install -m 0755 "$PACKAGING_DIR/postinst" "$RUNTIME_ROOT/DEBIAN/postinst"
+install -m 0755 "$PACKAGING_DIR/postrm" "$RUNTIME_ROOT/DEBIAN/postrm"
 deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" mesa25-ans "$MESA_VERSION"
 
 mkdir -p "$DEV_ROOT$PREFIX/lib" "$DEV_ROOT/usr/share/doc/mesa25-ans-dev"

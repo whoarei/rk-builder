@@ -1,0 +1,11 @@
+#!/bin/sh
+# Start Xorg against the Mesa 25.0.7 stack installed under /usr/local/ans.
+# LightDM sanitizes the X server environment, so reuse mesa25-run to set the
+# Mesa paths in the process that directly execs Xorg. glamor, AIGLX and DRI
+# then all use the same stack.
+set -e
+
+exec /usr/local/ans/bin/mesa25-run /usr/bin/X \
+    -config /usr/local/ans/share/rk-builder/mesa25-xorg.conf \
+    -configdir /usr/local/ans/share/rk-builder/xorg.conf.d \
+    "$@"

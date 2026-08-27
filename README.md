@@ -23,7 +23,9 @@
   6.1.6，固定 commit `705345ee866866d3ea5521c89c5abd9d0b0a245b`，启用
   GPL、x264、GnuTLS、`libdrm`、RKMPP 和 RKRGA；deb 版本为 6.1.6。
 - 桌面图形栈：交叉编译 libdrm 2.4.124 与 Mesa 25.0.7；Mesa 启用 X11、
-  EGL、GBM、GLES2、GLX/GLVND 和 `panfrost,softpipe` Gallium drivers。
+  EGL、GBM、GLES2、GLX/GLVND 和 `panfrost,softpipe` Gallium drivers。Mesa
+  运行包会停用不兼容的 BSP G52 loader 配置，并让 LightDM/Xorg 固定使用
+  Panfrost/Panthor glamor/DRI3 栈。
 - Qt：`/opt/qt-host/6.2.4` 提供 amd64 `moc/uic/rcc`，sysroot 中提供安装到
   `/usr/local/ans` 的 ARM64 qtbase/qtsvg GLES2 target libraries。host Qt
   不会进入目标 `CMAKE_PREFIX_PATH` 或 ARM64 deb。
@@ -255,6 +257,43 @@ docker build --target qt6-debs --output type=local,dest=dist .
 镜像构建默认开启 `USE_LOCAL_DEBS=ON`：优先用本地 `dist/` 里的 deb，其次
 GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强制
 总是从源码编译。
+
+### 在 RK3588 设备上启用 Mesa 硬件加速
+
+先安装配套的 libdrm 与 Mesa runtime deb，再重启 LightDM（会结束当前桌面
+会话）或直接重启设备：
+
+```bash
+sudo apt-get install \
+  ./libdrm-ans_2.4.124_arm64.deb \
+  ./mesa25-ans_25.0.7_arm64.deb
+sudo systemctl restart lightdm
+```
+
+`mesa25-ans` 保留 BSP libmali 软件包以满足依赖，但通过 `dpkg-divert` 停用其
+`00-aarch64-mali.conf`，并让 LightDM 通过 `mesa25-xorg` 启动 Xorg。验证：
+
+```bash
+DISPLAY=:0 XAUTHORITY=/home/ans/.Xauthority glxinfo -B
+grep -E 'glamor X acceleration enabled|AIGLX: Loaded|Initializing extension DRI3' \
+  /var/log/Xorg.0.log
+```
+
+正确结果应包含 `Mali-G610 (Panfrost)`、`Accelerated: yes` 和
+`glamor X acceleration enabled`，不能是 `softpipe`/`swrast`。
+
+注意事项：
+
+- 上述验证命令假定桌面用户为 `ans`、Xorg 显示号为 `:0`，请按实际情况
+  调整 `XAUTHORITY` 路径和 `DISPLAY`。
+- `mesa25-xorg` 以 `-config` 整体替换 Xorg 主配置，BSP 镜像
+  `/etc/X11/xorg.conf` 中的定制段（如 InputClass 输入设备配置）将不再
+  生效。`xserver-xorg-core` 会对 `/dev/input/*` 做 libinput 自动探测，
+  常见键鼠场景无需额外配置；如有定制输入配置，请迁移到
+  `/usr/local/ans/share/rk-builder/xorg.conf.d/` 下。
+- 该方案假定设备使用 LightDM；未安装 LightDM 的最小系统可以照常安装
+  该 deb（相关配置文件不会生效），仅需 Mesa 库时用 `mesa25-run` 启动
+  应用程序即可。
 
 ## GitHub Actions
 
