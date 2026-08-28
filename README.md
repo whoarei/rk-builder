@@ -240,7 +240,7 @@ docker build --target qt6-debs --output type=local,dest=dist .
 - `ffmpeg-rockchip_6.1.6_arm64.deb`、`ffmpeg-rockchip-dev_6.1.6_arm64.deb`
 - `gst-rockchip_1.14.4_arm64.deb`
 - `libdrm-ans_2.4.124_arm64.deb`、`libdrm-ans-dev_2.4.124_arm64.deb`
-- `mesa25-ans_25.0.7_arm64.deb`、`mesa25-ans-dev_25.0.7_arm64.deb`
+- `mesa25-ans_25.0.7-2_arm64.deb`、`mesa25-ans-dev_25.0.7-2_arm64.deb`
 - `qt6-ans_6.2.4_arm64.deb`、`qt6-ans-dev_6.2.4_arm64.deb`
 
 推送对应 tag 会触发 GitHub Actions 构建 deb 并发布 Release：
@@ -251,7 +251,7 @@ docker build --target qt6-debs --output type=local,dest=dist .
 - `ffmpeg-rockchip-v6.1.6` → ffmpeg-rockchip deb
 - `gst-rockchip-v1.14.4` → gst-rockchip deb
 - `libdrm-v2.4.124` → libdrm deb
-- `mesa-v25.0.7` → Mesa deb
+- `mesa-v25.0.7-2` → Mesa deb
 - `qt6-v6.2.4` → Qt 6 deb
 
 镜像构建默认开启 `USE_LOCAL_DEBS=ON`：优先用本地 `dist/` 里的 deb，其次
@@ -266,7 +266,7 @@ GitHub Release，最后才从源码编译。`--build-arg USE_LOCAL_DEBS=OFF` 强
 ```bash
 sudo apt-get install \
   ./libdrm-ans_2.4.124_arm64.deb \
-  ./mesa25-ans_25.0.7_arm64.deb
+  ./mesa25-ans_25.0.7-2_arm64.deb
 sudo systemctl restart lightdm
 ```
 

@@ -15,7 +15,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - name: Export Mesa debs
-        run: docker build --target mesa-debs --output type=local,dest="$PWD/dist" .
+        run: |
+          mesa_deb_version=25.0.7-2
+          if [[ $GITHUB_REF == refs/tags/mesa-v* ]]; then
+              mesa_deb_version=${GITHUB_REF_NAME#mesa-v}
+          fi
+          docker build --build-arg MESA_DEB_VERSION="$mesa_deb_version" \
+            --target mesa-debs --output type=local,dest="$PWD/dist" .
       - uses: actions/upload-artifact@v4
         with:
           name: mesa25-ans-arm64
@@ -27,5 +33,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          mesa_deb_version=${GITHUB_REF_NAME#mesa-v}
           gh release create "$GITHUB_REF_NAME" dist/*.deb dist/*.sha256 \
-            --verify-tag --generate-notes --title "Mesa 25.0.7 ARM64 Debian packages"
+            --verify-tag --generate-notes \
+            --title "Mesa $mesa_deb_version ARM64 Debian packages"

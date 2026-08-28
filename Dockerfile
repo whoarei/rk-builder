@@ -40,7 +40,9 @@ ARG MESON_SHA256=82c6818dc81743c96de3a458f06175776ebfde4081195ea31ea6971838f25e3
 ARG MESON_URL=https://files.pythonhosted.org/packages/e5/2b/46bda4ef5a7ae4135dbfe27fc0368c44e5a349a897a54fdf2cedb8dcb66e/meson-1.7.2-py3-none-any.whl
 ARG LIBDRM_VERSION=2.4.124
 ARG LIBDRM_COMMIT=38ec7dbd4df3141441afafe5ac62dfc9df36a77e
+# Mesa 源码版本与 Debian 打包修订号分别维护。
 ARG MESA_VERSION=25.0.7
+ARG MESA_DEB_VERSION
 ARG MESA_COMMIT=742a20f48c59e8649533c84c4d49dd95b403f5da
 ARG QT_VERSION=6.2.4
 ARG QTBASE_SHA256=d9924d6fd4fa5f8e24458c87f73ef3dfc1e7c9b877a5407c040d89e6736e2634
@@ -393,6 +395,7 @@ RUN LIBDRM_VERSION="$LIBDRM_VERSION" \
 FROM meson-builder AS mesa-deb
 
 ARG MESA_VERSION
+ARG MESA_DEB_VERSION
 ARG MESA_COMMIT
 ARG MESA_REPOSITORY=https://gitlab.freedesktop.org/mesa/mesa.git
 
@@ -405,6 +408,7 @@ COPY mesa/ /opt/rk-builder/mesa/
 COPY scripts/build-mesa-deb.sh /usr/local/bin/build-mesa-deb
 
 RUN MESA_VERSION="$MESA_VERSION" \
+    MESA_DEB_VERSION="$MESA_DEB_VERSION" \
     MESA_COMMIT="$MESA_COMMIT" \
     MESA_REPOSITORY="$MESA_REPOSITORY" \
     PACKAGING_DIR=/opt/rk-builder/mesa \

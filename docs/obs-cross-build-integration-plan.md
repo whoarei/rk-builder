@@ -274,8 +274,8 @@ docker run --rm --entrypoint cmake \
 - CMake 3.28.6、普通 C 和 Qt6 冒烟工程均在最终镜像构建阶段通过；Qt
   `moc`、`uic`、`rcc`、`qdbuscpp2xml` 为 x86-64，目标库为 AArch64。
 - OBS 32.2.1-6-g607839700 已在无 QEMU/binfmt 的流程中完成 configure、455
-  个目标的交叉编译和 CPack；deb control 中的包名为
-  `obs-studio-rk3588`、架构为 `arm64`（未提交集成改动的工作树会按 OBS
+  个目标的交叉编译和 CPack；当前 CPack 配置的 deb control 包名为
+  `obs-studio`、架构为 `arm64`（未提交集成改动的工作树会按 OBS
   约定在版本后附加 `-modified`，CPack 文件名保留上游格式）。
 - 生成的 deb 含 18 个 ELF，全部为 AArch64；未发现 `/opt/sysroot`、
   `/workspace` 或 `/tmp` RPATH/RUNPATH。desktop、metainfo 和 hicolor icons

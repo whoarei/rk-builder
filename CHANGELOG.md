@@ -2,6 +2,8 @@
 
 ## 0.5.0 - 2026-08-27
 
+- Mesa 上游源码版本保持 25.0.7，Debian 包版本更新为 `25.0.7-2`；release
+  workflow 从 `mesa-v*` tag 自动传入包版本。
 - `rk-builder.sh` 新增 `-a/--app <SUBDIR>`：在多应用工程中只交叉编译
   `PROJECT_DIR/SUBDIR` 子目录。整个工程仍挂载进容器（子目录可引用兄弟
   目录），产物写入 `build/<release|debug>/SUBDIR/`。功能通过容器入口点

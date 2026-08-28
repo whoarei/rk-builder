@@ -6,11 +6,18 @@ _script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$_script_dir/lib-deb-common.sh"
 
 MESA_VERSION=${MESA_VERSION:-25.0.7}
+MESA_DEB_VERSION=${MESA_DEB_VERSION:-$MESA_VERSION-2}
 MESA_COMMIT=${MESA_COMMIT:-742a20f48c59e8649533c84c4d49dd95b403f5da}
 MESA_REPOSITORY=${MESA_REPOSITORY:-https://gitlab.freedesktop.org/mesa/mesa.git}
 RK_SYSROOT=${RK_SYSROOT:-/opt/sysroot}
 CROSS_FILE=${CROSS_FILE:-/opt/rk-builder/aarch64-linux-gnu.ini}
 PREFIX=/usr/local/ans
+
+if [[ $MESA_DEB_VERSION != "$MESA_VERSION" && \
+      $MESA_DEB_VERSION != "$MESA_VERSION"-* ]]; then
+    echo "MESA_DEB_VERSION must package MESA_VERSION $MESA_VERSION: $MESA_DEB_VERSION" >&2
+    exit 1
+fi
 
 deb_common_init
 
@@ -109,14 +116,14 @@ install -m 0644 "$SOURCE_DIR/docs/license.rst" "$RUNTIME_ROOT/usr/share/doc/mesa
 printf '%s\n' '/usr/local/ans/lib' \
     > "$RUNTIME_ROOT/etc/ld.so.conf.d/00-ans-mesa25-ans.conf"
 
-deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$MESA_VERSION" \
+deb_render_control "$PACKAGING_DIR/control.in" "$RUNTIME_ROOT" "$MESA_DEB_VERSION" \
     PACKAGE=mesa25-ans \
     SECTION=libs \
     DEPENDS="xserver-common (>= 2:1.20.11-1+deb11u17), xserver-xorg-core (>= 2:1.20.11-1+deb11u17), libdrm-ans (>= 2.4.124), libc6, libgcc-s1, libstdc++6, libegl1, libgles2, libgl1, libglvnd0, libexpat1, libudev1, libx11-6, libx11-xcb1, libxcb1, libxcb-dri2-0, libxcb-dri3-0, libxcb-glx0, libxcb-present0, libxcb-randr0, libxcb-shm0, libxcb-sync1, libxcb-xfixes0, libxext6, libxfixes3, libxshmfence1, libxxf86vm1, zlib1g" \
     DESCRIPTION="Mesa $MESA_VERSION Panfrost/Panthor EGL, GLES, GLX and GBM stack (runtime)"
 install -m 0755 "$PACKAGING_DIR/postinst" "$RUNTIME_ROOT/DEBIAN/postinst"
 install -m 0755 "$PACKAGING_DIR/postrm" "$RUNTIME_ROOT/DEBIAN/postrm"
-deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" mesa25-ans "$MESA_VERSION"
+deb_finish_package "$RUNTIME_ROOT" "$OUT_DIR" mesa25-ans "$MESA_DEB_VERSION"
 
 mkdir -p "$DEV_ROOT$PREFIX/lib" "$DEV_ROOT/usr/share/doc/mesa25-ans-dev"
 cp -a "$INSTALL_DIR$PREFIX/include" "$DEV_ROOT$PREFIX/"
@@ -129,9 +136,9 @@ find "$INSTALL_DIR$PREFIX/lib" -maxdepth 1 -type l -name '*.so' \
     -exec cp -a {} "$DEV_ROOT$PREFIX/lib/" \;
 install -m 0644 "$SOURCE_DIR/docs/license.rst" "$DEV_ROOT/usr/share/doc/mesa25-ans-dev/copyright"
 
-deb_render_control "$PACKAGING_DIR/control.in" "$DEV_ROOT" "$MESA_VERSION" \
+deb_render_control "$PACKAGING_DIR/control.in" "$DEV_ROOT" "$MESA_DEB_VERSION" \
     PACKAGE=mesa25-ans-dev \
     SECTION=libdevel \
-    DEPENDS="mesa25-ans (= $MESA_VERSION), libdrm-ans-dev (>= 2.4.124), libglvnd-dev, libx11-dev, libxcb1-dev" \
+    DEPENDS="mesa25-ans (= $MESA_DEB_VERSION), libdrm-ans-dev (>= 2.4.124), libglvnd-dev, libx11-dev, libxcb1-dev" \
     DESCRIPTION="Mesa $MESA_VERSION Panfrost/Panthor graphics stack (development files)"
-deb_finish_package "$DEV_ROOT" "$OUT_DIR" mesa25-ans-dev "$MESA_VERSION"
+deb_finish_package "$DEV_ROOT" "$OUT_DIR" mesa25-ans-dev "$MESA_DEB_VERSION"
