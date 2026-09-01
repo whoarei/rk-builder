@@ -8,6 +8,16 @@ ARM64 deb，便于核对目标设备运行环境和交叉编译 sysroot 的组�
 - 清单只包含 Release 资产中的 `.deb`，不包含 `.sha256`、Debian 系统依赖，
   也不包含仅在本地生成但未发布的包。
 
+## 0.4.1
+
+- 镜像：`ghcr.io/whoarei/rk-builder:0.4.1`
+- 镜像源码 commit：见 tag `v0.4.1`
+- 目标架构：ARM64 (`arm64`)
+- 相对 0.4.0 的变化：librga 运行包改为版本化 SONAME 布局——以
+  `librga.so.2` 为实体（SONAME=`librga.so.2`）、`librga.so` 为开发符号链接；
+  ffmpeg-rockchip 随之重编，其引用 RGA 的库 NEEDED 由 `librga.so` 变为
+  `librga.so.2`。其余组件 deb 版本不变（见 0.4.0 表）。
+
 ## 0.4.0
 
 - 镜像：`ghcr.io/whoarei/rk-builder:0.4.0`
