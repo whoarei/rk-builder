@@ -21,6 +21,10 @@ runtime-only (GStreamer plugins install no headers/pkg-config).
   ARM64 deb packagers `build-librga-deb.sh`, `build-mpp-deb.sh`,
   `build-rknn-runtime-deb.sh`, `build-ffmpeg-rockchip-deb.sh`,
   `build-gstreamer-rockchip-deb.sh`.
+  `build-librga-deb.sh` additionally runs `patchelf --set-soname librga.so.2`
+  on the official prebuilt library and packages `librga.so.2` as the real
+  object with `librga.so` as the dev symlink (versioned SONAME layout), so the
+  `librga-deb` stage needs the `patchelf` apt package.
 - `cmake/aarch64-linux-gnu.cmake`: CMake toolchain file (compiler, sysroot,
   find rules).
 - `librga/`: deb packaging templates (`control.in`, `librga.pc.in`).

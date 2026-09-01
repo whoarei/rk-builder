@@ -42,8 +42,10 @@ OBS，也能编译依赖 Qt、Mesa、FFmpeg、MPP、RGA、GStreamer、RKNN、Ope
 
 - 这两个 deb 的实际头文件和库 API 是 `1.9.3_[2]`，pkg-config 版本是
   `2.1.0`，deb 版本 `2.2.0-1` 不是可与 API 版本直接比较的上游版本号。
-- 它们的动态库 SONAME 是 `librga.so.2`；rk-builder 当前预编译库的 SONAME
-  是 `librga.so`，两套包不能混装或相互覆盖。
+- rk-builder 现已把官方预编译库的 SONAME 用 `patchelf` 改为版本化的
+  `librga.so.2`，以 `librga.so.2` 为实体、`librga.so` 为开发符号链接打包。
+  因此 SONAME 与 BSP 的 `librga2` 一致，但 rk-builder 的 API 是更新的
+  `1.10.6`，两套包不应混装或相互覆盖。
 - rk-builder 固定源码中的实际 API 是 `1.10.6_[3]`，头文件和导出接口更新，
   并且当前 ffmpeg-rockchip 已经基于该版本构建。
 

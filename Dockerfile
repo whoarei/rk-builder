@@ -62,9 +62,10 @@ ARG DEBIAN_FRONTEND=noninteractive
 ARG LIBRGA_VERSION=1.10.6
 ARG LIBRGA_COMMIT=2b32edcb97b601b25683e2941d888c8515da6d55
 
-# 安装打包所需的最小工具集:dpkg-dev 提供 dpkg-deb,git 用于拉取源码
+# 安装打包所需的最小工具集:dpkg-dev 提供 dpkg-deb,git 用于拉取源码,
+# patchelf 用于把官方预编译库的 SONAME 改为版本化的 librga.so.2
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates dpkg-dev git \
+    && apt-get install -y --no-install-recommends ca-certificates dpkg-dev git patchelf \
     && rm -rf /var/lib/apt/lists/*
 
 # 本地维护的 debian 打包文件(control/rules 等)与打包脚本
@@ -787,6 +788,8 @@ COPY examples/qt/ /tmp/smoke/qt/
 RUN chmod 0755 /usr/local/bin/rk-cross-build \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librga.so \
         | grep -q AArch64 \
+    && aarch64-linux-gnu-readelf -d /opt/sysroot/usr/local/ans/lib/librga.so.2 \
+        | grep -q 'SONAME.*\[librga\.so\.2\]' \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librockchip_mpp.so \
         | grep -q AArch64 \
     && aarch64-linux-gnu-readelf -h /opt/sysroot/usr/local/ans/lib/librknnrt.so \

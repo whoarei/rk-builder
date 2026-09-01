@@ -41,7 +41,11 @@
 
 `airockchip/librga` 的 1.10.6 目前没有 tag，而且仓库只发布头文件、samples
 和官方预编译 `librga.so`，没有发布库实现源码。因此 deb 封装的是该
-commit 发布的官方 ARM64 库，不是本地重编 librga。
+commit 发布的官方 ARM64 库，不是本地重编 librga。打包时用 `patchelf` 把
+官方库的 SONAME 从 `librga.so` 改为版本化的 `librga.so.2`，以
+`librga.so.2` 为实体、`librga.so` 为开发符号链接，与 Rockchip BSP /
+设备端的版本化布局保持一致；下游经 `-lrga` 链接的产物 NEEDED 会记录为
+`librga.so.2`。
 
 Debian 11 官方仓库仅提供 FFmpeg 4.3，且没有 Rockchip 的
 `AV_HWDEVICE_TYPE_RKMPP`。镜像会保留 Debian ARM64 包构成的基础 sysroot，再将
